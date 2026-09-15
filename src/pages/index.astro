@@ -18,7 +18,7 @@ const posts = (await getCollection("blog"))
     </div>
 
     <h1 class="hero-title">
-      Crafting performant web experiences & <span class="gradient-text">sharing lessons</span> along the way.
+      Crafting performant web experiences & <span class="accent-text">sharing lessons</span> along the way.
     </h1>
 
     <p class="hero-subtitle">
@@ -165,10 +165,8 @@ const posts = (await getCollection("blog"))
     margin-bottom: 1.5rem;
   }
 
-  .gradient-text {
-    background: var(--gradient-brand);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+  .accent-text {
+    color: var(--primary);
   }
 
   .hero-subtitle {
