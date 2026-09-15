@@ -7,9 +7,10 @@ import "../styles/global.css";
 interface Props {
   title?: string;
   description?: string;
+  class?: string;
 }
 
-const { title = SITE_TITLE, description = SITE_DESCRIPTION } = Astro.props;
+const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className } = Astro.props;
 ---
 
 <!doctype html>
@@ -29,7 +30,7 @@ const { title = SITE_TITLE, description = SITE_DESCRIPTION } = Astro.props;
   <body>
     <div class="site-shell">
       <Header />
-      <main class="site-main">
+      <main class:list={["site-main", className]}>
         <slot />
       </main>
       <Footer />
