@@ -15,12 +15,33 @@ If you have existing content authored in MDX, this integration will hopefully ma
 
 import YouTube from '../../components/YouTube.astro';
 
-## Example
+## Component Bleed & Stretch Options
 
-Here is how you import and use a UI component inside of MDX.  
-Below is an embedded YouTube video using the `<YouTube />` component:
+Custom components can bleed out from the standard content width to a wide width, full bleed, or any custom size using the `stretch` prop.
 
-<YouTube id="dQw4w9WgXcQ" title="Example YouTube Video" />
+### 1. Default Width (`60rem`)
+
+When `stretch` is omitted (or set to `"default"`), components adhere to the readable content width:
+
+<YouTube id="dQw4w9WgXcQ" title="Default Width (60rem)" />
+
+### 2. Wide Width (`70rem`)
+
+Passing `stretch="wide"` allows the component to expand symmetrically past standard prose lines up to `70rem`:
+
+<YouTube id="dQw4w9WgXcQ" title="Wide Width (70rem)" stretch="wide" />
+
+### 3. Custom Width (e.g. `50rem`)
+
+You can pass any custom CSS dimension (such as `50rem`, `80rem`, etc.) to `stretch`:
+
+<YouTube id="dQw4w9WgXcQ" title="Custom Width (50rem)" stretch="50rem" />
+
+### 4. Full Width (`100%`)
+
+Setting `stretch="full"` lets the embed stretch all the way across the screen:
+
+<YouTube id="dQw4w9WgXcQ" title="Full Screen Width" stretch="full" />
 
 ## More Links
 

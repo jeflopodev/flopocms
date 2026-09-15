@@ -73,13 +73,21 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 </article>
 
 <style>
+  :global(.site-main.blog-post-shell) {
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
   .article-container {
-    max-width: var(--content-width);
+    width: 100%;
     margin: 0 auto;
   }
 
   .article-nav {
-    margin-bottom: 2rem;
+    width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--content-width, 60rem));
+    margin: 0 auto 2rem;
   }
 
   .back-link {
@@ -98,7 +106,9 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
   }
 
   .article-header {
-    margin-bottom: 2.5rem;
+    width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--content-width, 60rem));
+    margin: 0 auto 2.5rem;
   }
 
   .meta-row {
@@ -145,7 +155,9 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
   }
 
   .hero-image-wrapper {
-    margin: 2.5rem 0 3rem;
+    width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--wide-width, 70rem));
+    margin: 2.5rem auto 3rem;
     border-radius: var(--radius-lg);
     overflow: hidden;
     border: 1px solid var(--border-subtle);

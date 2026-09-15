@@ -50,7 +50,9 @@
 
   /* Layout & Sizing */
   --max-width: 1080px;
-  --content-width: 760px;
+  --content-width: 60rem;
+  --wide-width: 70rem;
+  --page-padding: 1.5rem;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -146,15 +148,83 @@ a:hover {
    ========================================================================== */
 
 .prose {
-  max-width: var(--content-width);
-  margin: 0 auto;
+  --default-width: var(--content-width, 60rem);
+  --wide-content-width: var(--wide-width, 70rem);
+  --gutter: var(--page-padding, 1.5rem);
+
+  width: 100%;
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(var(--gutter), 1fr)
+    [wide-start] minmax(0, calc((var(--wide-content-width) - var(--default-width)) / 2))
+    [content-start] min(var(--default-width), 100% - (var(--gutter) * 2)) [content-end]
+    minmax(0, calc((var(--wide-content-width) - var(--default-width)) / 2)) [wide-end]
+    minmax(var(--gutter), 1fr) [full-end];
   color: var(--text-secondary);
   font-size: 1.125rem;
   line-height: 1.75;
 }
 
+@media (max-width: 640px) {
+  .prose {
+    --gutter: 1rem;
+  }
+}
+
+.prose > * {
+  grid-column: content;
+  min-width: 0;
+}
+
 .prose > * + * {
   margin-top: 1.5rem;
+}
+
+/* Custom Components & Bleed Breakouts */
+[data-stretch] {
+  width: 100%;
+}
+
+[data-stretch="wide"] {
+  max-width: var(--wide-width, 70rem);
+  margin-inline: auto;
+}
+
+[data-stretch="default"] {
+  max-width: var(--content-width, 60rem);
+  margin-inline: auto;
+}
+
+[data-stretch="full"] {
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+[data-stretch]:not([data-stretch="wide"]):not([data-stretch="full"]):not([data-stretch="default"]) {
+  max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--stretch-width, var(--content-width, 60rem)));
+  margin-inline: auto;
+}
+
+/* Inside breakout grid (.prose) */
+.prose > [data-stretch="wide"] {
+  grid-column: wide;
+  max-width: none;
+}
+
+.prose > [data-stretch="full"] {
+  grid-column: full;
+  max-width: none;
+}
+
+.prose > [data-stretch="default"] {
+  grid-column: content;
+  max-width: none;
+}
+
+.prose > [data-stretch]:not([data-stretch="wide"]):not([data-stretch="full"]):not([data-stretch="default"]) {
+  grid-column: full;
+  justify-self: center;
+  max-width: min(calc(100% - 2 * var(--gutter)), var(--stretch-width, var(--default-width)));
 }
 
 .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {

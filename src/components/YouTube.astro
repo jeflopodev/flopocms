@@ -2,12 +2,19 @@
 interface Props {
 	id: string;
 	title?: string;
+	stretch?: 'wide' | 'full' | (string & {}) | undefined;
 }
 
-const { id, title = 'YouTube video player' } = Astro.props;
+const { id, title = 'YouTube video player', stretch } = Astro.props;
+
+const isCustom = stretch && stretch !== 'wide' && stretch !== 'full' && stretch !== 'default';
 ---
 
-<div class="youtube-container">
+<div
+	class="youtube-container"
+	data-stretch={stretch || 'default'}
+	style={isCustom ? `--stretch-width: ${stretch};` : undefined}
+>
 	<iframe
 		src={`https://www.youtube-nocookie.com/embed/${id}`}
 		title={title}
@@ -22,10 +29,14 @@ const { id, title = 'YouTube video player' } = Astro.props;
 		position: relative;
 		width: 100%;
 		aspect-ratio: 16 / 9;
-		margin: 1.5rem 0;
+		margin: 1.75rem 0;
 		border-radius: 0.75rem;
 		overflow: hidden;
 		box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	}
+
+	.youtube-container[data-stretch="full"] {
+		border-radius: 0;
 	}
 
 	.youtube-container iframe {
