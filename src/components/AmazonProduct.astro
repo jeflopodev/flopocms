@@ -1,0 +1,607 @@
+---
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
+
+interface Props {
+	title?: string;
+	description?: string;
+	image?: string | ImageMetadata;
+	imageAlt?: string;
+	badge?: string;
+	tags?: string[];
+	price?: string | number;
+	currencySymbol?: string;
+	originalPrice?: string | number;
+	discountText?: string;
+	rating?: number;
+	reviewsCount?: number | string;
+	amazonUrl?: string;
+	ctaText?: string;
+	detailsUrl?: string;
+	detailsText?: string;
+	imageFit?: 'cover' | 'contain' | 'fill' | 'none';
+	stretch?: 'wide' | 'full' | 'default' | (string & {}) | undefined;
+	class?: string;
+	className?: string;
+	style?: string | Record<string, any>;
+}
+
+const {
+	title = 'Premium Amazon Product',
+	description = 'High-quality item offering exceptional features, unparalleled performance, and elegant design. Get this premium product from Amazon today.',
+	image,
+	imageAlt = title,
+	badge = 'FEATURED',
+	tags = ['FREE DELIVERY', 'TOP RATED', 'SECURE CHECKOUT'],
+	price = '29.99',
+	currencySymbol = '$',
+	originalPrice = '37.49',
+	discountText = 'SAVE 20%',
+	rating = 4.5,
+	reviewsCount = '120 REVIEWS',
+	amazonUrl = '#',
+	ctaText = 'Buy Now on Amazon',
+	detailsUrl = '#',
+	detailsText = 'VIEW DETAILS',
+	imageFit = 'cover',
+	stretch,
+	class: classProp,
+	className,
+	style: customStyle,
+} = Astro.props;
+
+// Formatting price helpers
+const formatPrice = (val: string | number) => {
+	if (typeof val === 'number') {
+		return val.toFixed(2);
+	}
+	return String(val).replace(/^[$€£¥₹]/, '');
+};
+
+const formattedPrice = formatPrice(price);
+const formattedOriginalPrice = originalPrice ? formatPrice(originalPrice) : null;
+
+// Split price into whole and decimal parts for styling
+const [wholePrice, decimalPrice] = formattedPrice.includes('.')
+	? formattedPrice.split('.')
+	: [formattedPrice, '00'];
+
+// Rating stars calculations (out of 5)
+const maxStars = 5;
+const numericRating = Math.max(0, Math.min(5, Number(rating) || 0));
+
+// Stretch and classes
+const isCustom = stretch && stretch !== 'wide' && stretch !== 'full' && stretch !== 'default';
+const extraClasses = [classProp, className].filter(Boolean).join(' ');
+
+// Convert custom style if passed as object
+const parsedCustomStyle = typeof customStyle === 'object' && customStyle !== null
+	? Object.entries(customStyle).map(([k, v]) => `${k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)}: ${v};`).join(' ')
+	: (customStyle || '');
+
+const inlineStyle = [
+	isCustom ? `--stretch-width: ${stretch};` : '',
+	parsedCustomStyle
+].filter(Boolean).join(' ');
+---
+
+<div
+	class={`amazon-product-card ${extraClasses}`}
+	data-stretch={stretch || 'default'}
+	style={inlineStyle || undefined}
+>
+	<div class="product-media-column">
+		{badge && (
+			<span class="product-badge">
+				<svg class="badge-sparkle-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+					<path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z" />
+				</svg>
+				{badge}
+			</span>
+		)}
+		<div class="product-image-box">
+			{typeof image === 'object' && image !== null ? (
+				<Image src={image} alt={imageAlt} class="product-image" data-fit={imageFit} />
+			) : image ? (
+				<img src={image} alt={imageAlt} class="product-image" data-fit={imageFit} loading="lazy" />
+			) : (
+				<div class="product-placeholder-graphic">
+					<svg class="watch-mockup-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={imageAlt}>
+						<!-- Watch strap top -->
+						<rect x="76" y="16" width="48" height="42" rx="6" fill="#3D291F" />
+						<line x1="84" y1="24" x2="84" y2="48" stroke="#52392C" stroke-width="2" stroke-dasharray="3 3" />
+						<line x1="116" y1="24" x2="116" y2="48" stroke="#52392C" stroke-width="2" stroke-dasharray="3 3" />
+						<!-- Watch strap bottom -->
+						<rect x="76" y="142" width="48" height="42" rx="6" fill="#3D291F" />
+						<line x1="84" y1="150" x2="84" y2="176" stroke="#52392C" stroke-width="2" stroke-dasharray="3 3" />
+						<line x1="116" y1="150" x2="116" y2="176" stroke="#52392C" stroke-width="2" stroke-dasharray="3 3" />
+						<!-- Bezel outer -->
+						<circle cx="100" cy="100" r="62" fill="#D1D5DB" stroke="#9CA3AF" stroke-width="2" />
+						<circle cx="100" cy="100" r="58" fill="#1F2937" />
+						<!-- Bezel inner & Dial -->
+						<circle cx="100" cy="100" r="50" fill="#F8FAF7" stroke="#374151" stroke-width="1.5" />
+						<!-- Tachymeter markings -->
+						<circle cx="100" cy="100" r="48" stroke="#111827" stroke-width="1" stroke-dasharray="2 4" />
+						<!-- Subdials -->
+						<circle cx="100" cy="80" r="14" fill="#E5E7EB" stroke="#1F2937" stroke-width="1.2" />
+						<circle cx="82" cy="108" r="12" fill="#E5E7EB" stroke="#1F2937" stroke-width="1.2" />
+						<circle cx="100" cy="120" r="13" fill="#E5E7EB" stroke="#1F2937" stroke-width="1.2" />
+						<!-- Subdial ticks -->
+						<line x1="100" y1="70" x2="100" y2="74" stroke="#111827" stroke-width="1.5" />
+						<line x1="100" y1="80" x2="104" y2="76" stroke="#EF4444" stroke-width="1.2" />
+						<line x1="100" y1="120" x2="97" y2="114" stroke="#111827" stroke-width="1.2" />
+						<!-- Brand text label -->
+						<text x="114" y="97" font-size="7" font-weight="900" fill="#111827" letter-spacing="0.8" font-family="sans-serif">FOSSIL</text>
+						<text x="115" y="104" font-size="4" font-weight="600" fill="#6B7280" font-family="sans-serif">100 METERS</text>
+						<!-- Hour / minute hands -->
+						<line x1="100" y1="100" x2="72" y2="94" stroke="#111827" stroke-width="3" stroke-linecap="round" />
+						<line x1="100" y1="100" x2="124" y2="76" stroke="#111827" stroke-width="2.5" stroke-linecap="round" />
+						<line x1="100" y1="100" x2="100" y2="132" stroke="#DC2626" stroke-width="1" stroke-linecap="round" />
+						<circle cx="100" cy="100" r="3" fill="#111827" />
+						<!-- Crown and pushers -->
+						<rect x="160" y="93" width="7" height="14" rx="2" fill="#374151" />
+						<rect x="156" y="74" width="6" height="8" rx="2" fill="#4B5563" />
+						<rect x="156" y="118" width="6" height="8" rx="2" fill="#4B5563" />
+					</svg>
+				</div>
+			)}
+		</div>
+	</div>
+
+	<div class="product-info-column">
+		<header class="product-header">
+			<h3 class="product-title">{title}</h3>
+			<p class="product-description">{description}</p>
+		</header>
+
+		{tags && tags.length > 0 && (
+			<ul class="product-tags-list" aria-label="Product highlights">
+				{tags.map((tag) => (
+					<li class="product-tag-pill">{tag}</li>
+				))}
+			</ul>
+		)}
+
+		<div class="product-rating-divider"></div>
+
+		<div class="product-pricing-reviews-row">
+			<div class="product-price-section">
+				<div class="product-current-price">
+					<span class="currency-symbol">{currencySymbol}</span>
+					<span class="price-whole">{wholePrice}</span>
+					<span class="price-decimal">.{decimalPrice}</span>
+				</div>
+				{(formattedOriginalPrice || discountText) && (
+					<div class="product-price-discount-box">
+						{formattedOriginalPrice && (
+							<span class="original-price">{currencySymbol}{formattedOriginalPrice}</span>
+						)}
+						{discountText && (
+							<span class="discount-badge">{discountText}</span>
+						)}
+					</div>
+				)}
+			</div>
+
+			<div class="product-reviews-section">
+				<div class="stars-row" title={`${numericRating} out of 5 stars`} aria-label={`Rating: ${numericRating} out of 5 stars`}>
+					{Array.from({ length: maxStars }).map((_, i) => {
+						const fillPercentage = Math.max(0, Math.min(1, numericRating - i));
+						const isFull = fillPercentage >= 0.8;
+						const isHalf = fillPercentage >= 0.25 && fillPercentage < 0.8;
+						return (
+							<span class={`star-icon ${isFull ? 'star-filled' : isHalf ? 'star-half' : 'star-empty'}`}>
+								★
+							</span>
+						);
+					})}
+				</div>
+				{reviewsCount && (
+					<span class="reviews-count-text">{reviewsCount}</span>
+				)}
+			</div>
+		</div>
+
+		<footer class="product-actions-row">
+			<a
+				href={amazonUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="amazon-buy-button"
+			>
+				<svg class="cart-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="9" cy="21" r="1"></circle>
+					<circle cx="20" cy="21" r="1"></circle>
+					<path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+				</svg>
+				<span>{ctaText}</span>
+			</a>
+
+			{detailsText && (
+				<a
+					href={detailsUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="view-details-link"
+				>
+					<span>{detailsText}</span>
+					<svg class="external-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+						<polyline points="15 3 21 3 21 9"></polyline>
+						<line x1="10" y1="14" x2="21" y2="3"></line>
+					</svg>
+				</a>
+			)}
+		</footer>
+	</div>
+</div>
+
+<style>
+	/* Main Card Container */
+	.amazon-product-card {
+		--amazon-orange: #f59e0b;
+		--amazon-orange-hover: #d97706;
+		--card-bg: #ffffff;
+		--card-border: #e2e8f0;
+		--card-radius: 1.125rem;
+
+		display: flex;
+		flex-direction: row;
+		align-items: stretch;
+		gap: 2rem;
+		background: var(--card-bg);
+		border: 1px solid var(--card-border);
+		border-radius: var(--card-radius);
+		padding: 1.5rem;
+		margin: 2.25rem 0;
+		box-shadow:
+			0 10px 25px -5px rgba(0, 0, 0, 0.04),
+			0 8px 10px -6px rgba(0, 0, 0, 0.02);
+		box-sizing: border-box;
+		font-family: inherit;
+		position: relative;
+	}
+
+	.amazon-product-card[data-stretch="full"] {
+		border-radius: 0;
+		border-left: 0;
+		border-right: 0;
+	}
+
+	/* Left Column - Image & Badge */
+	.product-media-column {
+		position: relative;
+		flex: 0 0 280px;
+		max-width: 280px;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.product-badge {
+		position: absolute;
+		top: 0.85rem;
+		left: 0.85rem;
+		z-index: 2;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		background: #f97316;
+		color: #ffffff;
+		font-size: 0.675rem;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		padding: 0.28rem 0.65rem;
+		border-radius: 9999px;
+		box-shadow: 0 2px 5px rgba(249, 115, 22, 0.35);
+	}
+
+	.badge-sparkle-icon {
+		display: inline-block;
+		flex-shrink: 0;
+	}
+
+	.product-image-box {
+		width: 100%;
+		height: 100%;
+		min-height: 250px;
+		background: #dce3eb;
+		background: radial-gradient(circle at center, #eaedf1 0%, #d5dce4 100%);
+		border-radius: 0.875rem;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+	}
+
+	.product-image {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.product-image[data-fit="contain"] {
+		object-fit: contain;
+		padding: 0.75rem;
+	}
+
+	.product-image[data-fit="fill"] {
+		object-fit: fill;
+	}
+
+	.product-image[data-fit="none"] {
+		object-fit: none;
+	}
+
+	.product-placeholder-graphic {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1.25rem;
+	}
+
+	.watch-mockup-svg {
+		width: 82%;
+		height: auto;
+		max-height: 230px;
+		filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.16));
+	}
+
+	/* Right Column - Info */
+	.product-info-column {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		justify-content: space-between;
+	}
+
+	.product-header {
+		margin-bottom: 0.85rem;
+	}
+
+	.product-title {
+		font-size: 1.65rem;
+		font-weight: 800;
+		color: #111827;
+		line-height: 1.2;
+		letter-spacing: -0.025em;
+		margin: 0 0 0.65rem 0;
+	}
+
+	.product-description {
+		font-size: 0.95rem;
+		color: #4b5563;
+		line-height: 1.55;
+		margin: 0;
+	}
+
+	/* Tag Pills */
+	.product-tags-list {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 1.25rem 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.product-tag-pill {
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: #64748b;
+		background: #f8fafc;
+		border: 1px solid #e2e8f0;
+		padding: 0.28rem 0.65rem;
+		border-radius: 0.4rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.product-rating-divider {
+		height: 1px;
+		background-color: #f1f5f9;
+		margin-bottom: 1.25rem;
+		width: 100%;
+	}
+
+	/* Pricing & Reviews Row */
+	.product-pricing-reviews-row {
+		display: flex;
+		align-items: center;
+		gap: 2rem;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	.product-price-section {
+		display: flex;
+		align-items: baseline;
+		gap: 0.65rem;
+	}
+
+	.product-current-price {
+		display: inline-flex;
+		align-items: flex-start;
+		color: #0f172a;
+		font-weight: 900;
+		line-height: 1;
+		letter-spacing: -0.03em;
+	}
+
+	.currency-symbol {
+		font-size: 1.15rem;
+		margin-top: 0.15rem;
+		margin-right: 0.15rem;
+		color: #64748b;
+		font-weight: 700;
+	}
+
+	.price-whole {
+		font-size: 2.25rem;
+		font-weight: 900;
+	}
+
+	.price-decimal {
+		font-size: 1.5rem;
+		font-weight: 800;
+	}
+
+	.product-price-discount-box {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.original-price {
+		font-size: 0.85rem;
+		color: #94a3b8;
+		text-decoration: line-through;
+		font-weight: 600;
+	}
+
+	.discount-badge {
+		font-size: 0.65rem;
+		font-weight: 800;
+		color: #059669;
+		background: #ecfdf5;
+		padding: 0.15rem 0.35rem;
+		border-radius: 0.25rem;
+		letter-spacing: 0.02em;
+		display: inline-block;
+		width: fit-content;
+	}
+
+	/* Reviews / Rating Section */
+	.product-reviews-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		border-left: 1px solid #e2e8f0;
+		padding-left: 1.5rem;
+	}
+
+	.stars-row {
+		display: flex;
+		gap: 0.15rem;
+		color: #f59e0b;
+		font-size: 1.1rem;
+		line-height: 1;
+	}
+
+	.star-icon {
+		display: inline-block;
+		user-select: none;
+	}
+
+	.star-filled {
+		color: #f59e0b;
+	}
+
+	.star-half {
+		color: #f59e0b;
+		opacity: 0.75;
+	}
+
+	.star-empty {
+		color: #cbd5e1;
+	}
+
+	.reviews-count-text {
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: #94a3b8;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	/* Action Buttons */
+	.product-actions-row {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		margin-top: auto;
+		flex-wrap: wrap;
+	}
+
+	.amazon-buy-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		background-color: #f59e0b;
+		color: #111827;
+		font-size: 0.95rem;
+		font-weight: 700;
+		padding: 0.75rem 1.6rem;
+		border-radius: 0.65rem;
+		text-decoration: none;
+		box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+		transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+	}
+
+	.amazon-buy-button:hover {
+		background-color: #d97706;
+		color: #ffffff;
+		transform: translateY(-1px);
+		box-shadow: 0 4px 10px rgba(217, 119, 6, 0.3);
+	}
+
+	.cart-icon {
+		flex-shrink: 0;
+	}
+
+	.view-details-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.8rem;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+		color: #334155;
+		text-decoration: none;
+		text-transform: uppercase;
+		transition: color 0.15s ease, transform 0.15s ease;
+	}
+
+	.view-details-link:hover {
+		color: #0f172a;
+		transform: translateX(1px);
+		text-decoration: none;
+	}
+
+	.external-icon {
+		flex-shrink: 0;
+	}
+
+	/* Responsive Layout */
+	@media (max-width: 768px) {
+		.amazon-product-card {
+			flex-direction: column;
+			gap: 1.5rem;
+			padding: 1.25rem;
+		}
+
+		.product-media-column {
+			max-width: 100%;
+			flex: initial;
+		}
+
+		.product-image-box {
+			min-height: 220px;
+		}
+
+		.product-reviews-section {
+			border-left: none;
+			padding-left: 0;
+		}
+
+		.product-pricing-reviews-row {
+			gap: 1.25rem;
+		}
+	}
+</style>
