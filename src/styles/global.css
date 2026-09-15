@@ -80,10 +80,6 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-image: var(--gradient-glow);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-size: 100% 600px;
 }
 
 img, picture, video, canvas, svg {
