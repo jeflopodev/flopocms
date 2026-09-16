@@ -8,9 +8,10 @@ interface Props {
   title?: string;
   description?: string;
   class?: string;
+  jsonLd?: Record<string, any>;
 }
 
-const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className } = Astro.props;
+const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className, jsonLd } = Astro.props;
 ---
 
 <!doctype html>
@@ -26,6 +27,9 @@ const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className } =
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta name="theme-color" content="#ffffff" />
+    {jsonLd && (
+      <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    )}
   </head>
   <body>
     <div class="site-shell">

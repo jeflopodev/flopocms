@@ -1,0 +1,14 @@
+---
+/**
+ * Declarative Schema.org structured data component for MDX.
+ * The Sätteri AST Schema Extractor parses this component at build time
+ * and automatically incorporates its data into the page's unified JSON-LD @graph.
+ */
+interface Props {
+  type: string;
+  data: Record<string, any>;
+}
+
+const { type, data } = Astro.props;
+---
+<!-- Schema: {type} is extracted at build time by Sätteri into the page <head> JSON-LD @graph -->

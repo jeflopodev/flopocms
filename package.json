@@ -7,9 +7,12 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/check-image-sizes.mjs && astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check:images": "node scripts/check-image-sizes.mjs",
+    "deploy": "astro build && wrangler deploy",
+    "new-article": "node scripts/new-article.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
@@ -20,6 +23,10 @@
     "typescript": "^7.0.2"
   },
   "allowScripts": {
-    "esbuild": true
+    "esbuild": true,
+    "workerd": true
+  },
+  "devDependencies": {
+    "wrangler": "^4.131.2"
   }
 }

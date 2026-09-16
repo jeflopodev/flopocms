@@ -1,12 +1,10 @@
 ---
 import { Image } from "astro:assets";
-import { getCollection } from "astro:content";
 import RootLayout from "#/layouts/root-layout.astro";
 import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { getVisibleBlogArticles } from "../utils/articles";
 
-const posts = (await getCollection("blog"))
-  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 3);
+const posts = (await getVisibleBlogArticles()).slice(0, 3);
 ---
 
 <RootLayout title="Home">
