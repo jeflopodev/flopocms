@@ -9,9 +9,6 @@ import { satteriSchemaExtractor } from './src/plugins/satteri-schema-extractor.m
 // https://astro.build/config
 export default defineConfig({
   adapter: cloudflare({
-    platformProxy: {
-      enabled: true,
-    },
     imageService: 'compile',
   }),
   integrations: [

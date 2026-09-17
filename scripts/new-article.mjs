@@ -121,15 +121,12 @@ async function main() {
   fs.mkdirSync(bundleDir, { recursive: true });
 
   const starterMdx = `---
-title: '${title.replace(/'/g, "\\'")}'
+title: '${title.replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim()}'
 description: 'Add a concise summary describing this article...'
 pubDate: '${today}'
 author: '${editor}'
 draft: true
 ---
-
-import AmazonProduct from '#/components/amazon-product.astro';
-import YouTube from '#/components/youtube.astro';
 
 Write your article content here. You can use standard Markdown, co-locate images in this folder, and embed components.
 

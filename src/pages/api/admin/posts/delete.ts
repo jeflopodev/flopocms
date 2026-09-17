@@ -6,7 +6,7 @@ import { getDb } from "../../../../lib/db";
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const db = getDb(locals);
-    const body = await request.json();
+    const body = (await request.json()) as { id?: string };
     const { id } = body;
 
     if (!id) {
@@ -14,6 +14,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    const post = await db
+      .prepare("SELECT slug FROM posts WHERE id = ?")
+      .bind(id)
+      .first<{ slug: string }>();
+
+    if (post?.slug) {
+      await db.prepare("DELETE FROM assets WHERE post_slug = ?").bind(post.slug).run();
     }
 
     await db.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();

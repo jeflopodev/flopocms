@@ -4,6 +4,12 @@ import type { APIRoute } from "astro";
 import { getDb, type UserRow } from "../../../../lib/db";
 import { generateSalt, hashPassword, verifyPassword } from "../../../../lib/auth";
 
+interface ChangePasswordPayload {
+  currentPassword?: string;
+  newPassword?: string;
+  confirmPassword?: string;
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const user = locals.user;
@@ -14,7 +20,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as ChangePasswordPayload;
     const { currentPassword, newPassword, confirmPassword } = body;
 
     if (!currentPassword || !newPassword || !confirmPassword) {

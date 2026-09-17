@@ -1,4 +1,42 @@
 /**
+ * Safely parses JS literal expressions (primitives, arrays, objects) without code evaluation.
+ */
+function safeParseLiteral(raw) {
+  if (!raw) return undefined;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (raw === "null") return null;
+  if (raw === "undefined") return undefined;
+  if (!isNaN(Number(raw))) return Number(raw);
+
+  // Quoted strings
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    return raw.slice(1, -1);
+  }
+
+  // Try direct JSON.parse
+  try {
+    return JSON.parse(raw);
+  } catch {}
+
+  // Safely normalize JS object/array literal to valid JSON (single quotes to double quotes, quote unquoted keys)
+  try {
+    const jsonFormatted = raw
+      .replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (_, p1) => {
+        return JSON.stringify(p1.replace(/\\'/g, "'"));
+      })
+      .replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":');
+
+    return JSON.parse(jsonFormatted);
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * Safely parses JSX attribute values (strings, numbers, booleans, objects, arrays).
  */
 function parseAttributeValue(attr) {
@@ -11,20 +49,7 @@ function parseAttributeValue(attr) {
   }
   if (attr.value.type === "mdxJsxAttributeValueExpression") {
     const raw = attr.value.value?.trim();
-    if (!raw) return undefined;
-
-    // Fast-path primitives
-    if (raw === "true") return true;
-    if (raw === "false") return false;
-    if (raw === "null") return null;
-    if (!isNaN(Number(raw))) return Number(raw);
-
-    // Safely evaluate simple array or object literals
-    try {
-      return Function(`"use strict"; return (${raw});`)();
-    } catch {
-      return raw;
-    }
+    return safeParseLiteral(raw);
   }
   return attr.value;
 }

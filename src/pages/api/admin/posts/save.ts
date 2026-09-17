@@ -3,10 +3,24 @@ export const prerender = false;
 import type { APIRoute } from "astro";
 import { getDb, type PostRow } from "../../../../lib/db";
 
+interface SavePostPayload {
+  id?: string;
+  slug?: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[] | string;
+  author?: string;
+  featured_image?: string;
+  content_mdx?: string;
+  status?: "draft" | "published";
+  pub_date?: string;
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const db = getDb(locals);
-    const body = await request.json();
+    const body = (await request.json()) as SavePostPayload;
 
     const {
       id,
@@ -29,6 +43,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
+    const cleanSlug = slug.trim().toLowerCase();
+    const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    if (!SLUG_REGEX.test(cleanSlug)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid post slug format. Must be lowercase alphanumeric with hyphens." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const tagsStr = Array.isArray(tags) ? JSON.stringify(tags) : tags;
     const now = new Date().toISOString();
     const effectivePubDate = pub_date || now;
@@ -43,12 +66,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       // Check slug uniqueness across OTHER posts
       const slugConflict = await db
         .prepare("SELECT id FROM posts WHERE slug = ? AND id != ?")
-        .bind(slug, id)
+        .bind(cleanSlug, id)
         .first<PostRow>();
 
       if (slugConflict) {
         return new Response(
-          JSON.stringify({ success: false, error: `Slug "${slug}" is already used by another post.` }),
+          JSON.stringify({ success: false, error: `Slug "${cleanSlug}" is already used by another post.` }),
           { status: 409, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -70,7 +93,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
            WHERE id = ?`
         )
         .bind(
-          slug,
+          cleanSlug,
           title,
           description,
           category,
@@ -92,7 +115,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         )
         .bind(
           id,
-          slug,
+          cleanSlug,
           title,
           description,
           category,

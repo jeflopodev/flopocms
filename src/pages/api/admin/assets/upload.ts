@@ -10,11 +10,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const slug = (formData.get("slug") as string)?.trim();
+    const slug = (formData.get("slug") as string)?.trim().toLowerCase();
 
     if (!file || !slug) {
       return new Response(
         JSON.stringify({ success: false, error: "File and post slug are required" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    if (!SLUG_REGEX.test(slug)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid post slug format. Must be alphanumeric with hyphens." }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -98,12 +106,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
       try {
         const fs = await import("node:fs");
         const path = await import("node:path");
-        const targetDir = path.join(process.cwd(), "src", "content", "blog", slug);
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
+        const baseDir = path.resolve(process.cwd(), "src", "content", "blog");
+        const targetDir = path.resolve(baseDir, slug);
+        if (targetDir.startsWith(baseDir) && targetDir !== baseDir) {
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+          const filePath = path.join(targetDir, cleanFilename);
+          fs.writeFileSync(filePath, buffer);
         }
-        const filePath = path.join(targetDir, cleanFilename);
-        fs.writeFileSync(filePath, buffer);
       } catch (localErr) {
         console.warn("Local filesystem write error:", localErr);
       }

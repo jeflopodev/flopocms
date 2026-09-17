@@ -6,7 +6,7 @@ import { getDb, type PostRow } from "../../../../lib/db";
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const db = getDb(locals);
-    const body = await request.json();
+    const body = (await request.json()) as { id?: string };
     const { id } = body;
 
     if (!id) {

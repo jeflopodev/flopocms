@@ -7,7 +7,7 @@ import { getDb, type PostRow } from "../../../../lib/db";
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const db = getDb(locals);
-    const body = await request.json();
+    const body = (await request.json()) as { id?: string };
     const { id } = body;
 
     if (!id) {
@@ -29,14 +29,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const slug = post.slug;
+    const slug = post.slug?.trim().toLowerCase();
+    const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    if (!slug || !SLUG_REGEX.test(slug)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid post slug format. Must be alphanumeric with hyphens." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const pubDate = post.pub_date ? post.pub_date.split("T")[0] : today;
 
-    // Escape frontmatter single quotes
-    const safeTitle = (post.title || "").replace(/'/g, "\\'");
-    const safeDesc = (post.description || "").replace(/'/g, "\\'");
-    const heroLine = post.featured_image ? `heroImage: '${post.featured_image}'\n` : "";
+    // Safely escape single quotes and strip newlines in YAML string attributes
+    const safeTitle = (post.title || "").replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
+    const safeDesc = (post.description || "").replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
+    const heroLine = post.featured_image ? `heroImage: '${post.featured_image.replace(/'/g, "''")}'\n` : "";
 
     const mdxContent = `---
 title: '${safeTitle}'
@@ -106,12 +114,15 @@ ${post.content_mdx || ""}
       try {
         const fs = await import("node:fs");
         const path = await import("node:path");
-        const targetDir = path.join(process.cwd(), "src", "content", "blog", slug);
-        if (!fs.existsSync(targetDir)) {
-          fs.mkdirSync(targetDir, { recursive: true });
+        const baseDir = path.resolve(process.cwd(), "src", "content", "blog");
+        const targetDir = path.resolve(baseDir, slug);
+        if (targetDir.startsWith(baseDir) && targetDir !== baseDir) {
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+          const filePath = path.join(targetDir, "index.mdx");
+          fs.writeFileSync(filePath, mdxContent, "utf-8");
         }
-        const filePath = path.join(targetDir, "index.mdx");
-        fs.writeFileSync(filePath, mdxContent, "utf-8");
       } catch (localErr) {
         console.warn("Local filesystem write error:", localErr);
       }

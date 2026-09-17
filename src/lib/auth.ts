@@ -45,11 +45,25 @@ export async function hashPassword(password: string, salt: string): Promise<stri
     .join("");
 }
 
+/**
+ * Constant-time string equality check to prevent timing attacks.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export async function verifyPassword(
   password: string,
   salt: string,
   storedHash: string
 ): Promise<boolean> {
   const hash = await hashPassword(password, salt);
-  return hash === storedHash;
+  return timingSafeEqual(hash, storedHash);
 }

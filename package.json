@@ -15,7 +15,8 @@
     "deploy": "astro build && wrangler deploy",
     "new-article": "node scripts/new-article.mjs",
     "seed:users": "node scripts/seed-users.mjs",
-    "d1:migrate": "wrangler d1 migrations apply DB"
+    "d1:migrate": "wrangler d1 migrations apply DB",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
@@ -34,6 +35,8 @@
     "workerd": true
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260916.1",
+    "@types/node": "^22.20.3",
     "wrangler": "^4.132.0"
   }
 }

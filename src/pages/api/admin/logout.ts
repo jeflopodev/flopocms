@@ -18,7 +18,3 @@ export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
   cookies.delete("admin_session", { path: "/" });
   return redirect("/admin/login");
 };
-
-export const GET: APIRoute = async (context) => {
-  return POST(context);
-};
