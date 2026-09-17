@@ -1,0 +1,487 @@
+---
+export const prerender = false;
+
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { getDb, type PostRow } from "../../../lib/db";
+import { getCollection } from "astro:content";
+
+const db = getDb(Astro.locals);
+
+// Fetch posts from D1
+let posts = (
+  await db
+    .prepare("SELECT * FROM posts ORDER BY updated_at DESC")
+    .all<PostRow>()
+).results || [];
+
+// If D1 posts table is empty, auto-seed with existing articles in src/content/blog
+if (posts.length === 0) {
+  try {
+    const existingPosts = await getCollection("blog");
+    for (const post of existingPosts) {
+      const id = crypto.randomUUID();
+      const slug = post.id;
+      const title = post.data.title;
+      const description = post.data.description || "";
+      const author = post.data.author || "jeflopo";
+      const status = post.data.draft ? "draft" : "published";
+      const pubDate = post.data.pubDate.toISOString();
+      const contentMdx = post.body || "";
+
+      await db
+        .prepare(
+          `INSERT INTO posts (id, slug, title, description, author, status, pub_date, content_mdx) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug) DO NOTHING`
+        )
+        .bind(id, slug, title, description, author, status, pubDate, contentMdx)
+        .run();
+    }
+
+    posts = (
+      await db
+        .prepare("SELECT * FROM posts ORDER BY updated_at DESC")
+        .all<PostRow>()
+    ).results || [];
+  } catch (err) {
+    console.error("Auto-sync existing posts error:", err);
+  }
+}
+---
+
+<AdminLayout title="Articles" activeTab="posts">
+  <div class="posts-page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Articles</h1>
+        <p class="page-subtitle">Manage, edit, duplicate, and publish content across the blog</p>
+      </div>
+
+      <div class="header-actions">
+        <a href="/admin/posts/new" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New Article
+        </a>
+      </div>
+    </div>
+
+    <!-- Articles Table Card -->
+    <div class="table-card">
+      {posts.length === 0 ? (
+        <div class="empty-state">
+          <div class="empty-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <h3>No articles found in D1</h3>
+          <p>Get started by creating your first article draft.</p>
+          <a href="/admin/posts/new" class="btn btn-primary">Create Article</a>
+        </div>
+      ) : (
+        <div class="table-responsive">
+          <table class="posts-table">
+            <thead>
+              <tr>
+                <th>Title & Slug</th>
+                <th>Author</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Last Updated</th>
+                <th class="actions-col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {posts.map((post) => (
+                <tr id={`post-row-${post.id}`}>
+                  <td class="title-cell">
+                    <a href={`/admin/posts/${post.id}`} class="post-title-link">
+                      {post.title}
+                    </a>
+                    <span class="post-slug-label">/{post.slug}</span>
+                  </td>
+                  <td>
+                    <span class="author-pill">@{post.author}</span>
+                  </td>
+                  <td>
+                    <span class="category-text">{post.category || "General"}</span>
+                  </td>
+                  <td>
+                    <span class:list={["status-badge", post.status]}>
+                      <span class="status-dot"></span>
+                      {post.status === "published" ? "Published" : "Draft"}
+                    </span>
+                  </td>
+                  <td class="date-cell">
+                    {new Intl.DateTimeFormat("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }).format(new Date(post.updated_at || post.created_at))}
+                  </td>
+                  <td class="actions-cell">
+                    <div class="action-buttons">
+                      <a href={`/admin/posts/${post.id}`} class="action-icon-btn edit" title="Edit in CodeMirror">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </a>
+
+                      <button
+                        type="button"
+                        class="action-icon-btn duplicate-btn"
+                        data-post-id={post.id}
+                        title="Duplicate Post"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      </button>
+
+                      <a href={`/blog/${post.slug}`} target="_blank" class="action-icon-btn view" title="View Post">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </a>
+
+                      <button
+                        type="button"
+                        class="action-icon-btn delete delete-btn"
+                        data-post-id={post.id}
+                        data-post-title={post.title}
+                        title="Delete Post"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+
+  <script>
+    // Duplicate button handler
+    document.querySelectorAll(".duplicate-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const id = target.dataset.postId;
+        if (!id) return;
+
+        target.style.opacity = "0.5";
+        try {
+          const res = await fetch("/api/admin/posts/duplicate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          const data = await res.json();
+          if (data.success && data.newId) {
+            window.location.href = `/admin/posts/${data.newId}`;
+          } else {
+            alert(data.error || "Failed to duplicate post");
+            target.style.opacity = "1";
+          }
+        } catch {
+          alert("Error contacting server");
+          target.style.opacity = "1";
+        }
+      });
+    });
+
+    // Delete button handler
+    document.querySelectorAll(".delete-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const id = target.dataset.postId;
+        const title = target.dataset.postTitle || "this post";
+        if (!id) return;
+
+        if (!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
+          return;
+        }
+
+        try {
+          const res = await fetch("/api/admin/posts/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const row = document.getElementById(`post-row-${id}`);
+            row?.remove();
+          } else {
+            alert(data.error || "Failed to delete post");
+          }
+        } catch {
+          alert("Error contacting server");
+        }
+      });
+    });
+  </script>
+</AdminLayout>
+
+<style>
+  .posts-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0 0 0.35rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  }
+
+  .btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+  }
+
+  .table-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+  }
+
+  .posts-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+
+  .posts-table th {
+    background: var(--bg-body);
+    padding: 0.85rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .posts-table td {
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+  }
+
+  .posts-table tbody tr:hover {
+    background: rgba(99, 102, 241, 0.03);
+  }
+
+  .title-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-width: 320px;
+  }
+
+  .post-title-link {
+    font-weight: 600;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .post-title-link:hover {
+    color: var(--primary);
+  }
+
+  .post-slug-label {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .author-pill {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.04);
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .category-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .status-badge.published {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+
+  .status-badge.published .status-dot {
+    background: #10b981;
+  }
+
+  .status-badge.draft {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .status-badge.draft .status-dot {
+    background: #f59e0b;
+  }
+
+  .date-cell {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .actions-col {
+    text-align: right;
+  }
+
+  .actions-cell {
+    text-align: right;
+  }
+
+  .action-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .action-icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+  }
+
+  .action-icon-btn:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    border-color: rgba(99, 102, 241, 0.2);
+  }
+
+  .action-icon-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .empty-state {
+    padding: 4rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .empty-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state h3 {
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  .empty-state p {
+    color: var(--text-muted);
+    margin: 0 0 1rem;
+    max-width: 400px;
+  }
+</style>

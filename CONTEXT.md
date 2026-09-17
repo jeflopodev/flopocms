@@ -13,24 +13,40 @@ A folder containing an article's `index.mdx` alongside its co-located media asse
 _Avoid_: Article folder, post directory
 
 **Editor**:
-One of the two authoring users (`jeflopo` or `aflopo`) who writes, updates, and publishes articles via Git and MDX.
+One of the two authenticated users (`jeflopo` or `aflopo`) who writes, updates, and publishes articles.
 _Avoid_: Admin, author, contributor
 
-**Editor Branch**:
-A Git branch isolated to a specific editor and article using the namespace prefix `jeflopo/<slug>` or `aflopo/<slug>`.
-_Avoid_: Feature branch, work branch
-
 **Draft**:
-An article flagged as work-in-progress (`draft: true`) that is rendered on preview deployments but omitted from production builds and feeds.
+An article flagged as work-in-progress (`draft: true` or saved in D1) that is not rendered on production builds.
 _Avoid_: Staged article, unpublished post
 
-**Editorial PR**:
-A GitHub Pull Request opened from an Editor Branch to `main`, which automatically triggers a Cloudflare Preview Deployment.
-_Avoid_: Content ticket, review request
+**Admin Dashboard**:
+The server-rendered administrative interface (`/admin`) on Cloudflare Workers providing post tables, asset management, and editorial actions.
+_Avoid_: Backoffice, control panel, CMS UI
 
-**Preview Deployment**:
-An ephemeral branch or pull-request build on Cloudflare used by editors to review articles before release.
-_Avoid_: Staging environment, test site
+**Article Editor**:
+A full-screen CodeMirror workspace featuring a top action bar, markdown formatting toolbar, and exclusive right-docked side panels (Settings and Blocks).
+_Avoid_: Text box, edit page
+
+**Settings Panel**:
+The default right-docked editor panel managing frontmatter metadata (title, slug, author, category, tags, featured image, pubDate).
+_Avoid_: Metadata sidebar, post settings
+
+**Blocks Panel**:
+The right-docked drawer presenting custom component widgets (Amazon Product, YouTube, Pros/Cons, Schema) that can be inserted into the editor.
+_Avoid_: Component drawer, widget tray
+
+**Global MDX Components**:
+Custom components (`AmazonProduct`, `YouTube`, `Schema`) auto-imported globally across all MDX documents, eliminating manual in-file import statements.
+_Avoid_: Local imports, component scripts
+
+**Asset Registry**:
+A D1 database table tracking uploaded media assets, variants, and article associations alongside their co-located Git bundle paths.
+_Avoid_: Media library, file table
+
+**Git Sync Publisher**:
+The Cloudflare Worker backend service that pushes D1 article state and assets to GitHub via the GitHub REST API upon publication, triggering static build.
+_Avoid_: Deploy hook, repo sync
 
 **Breakout Component**:
 A custom MDX component that visually spans beyond the standard article prose width via the `stretch` prop (`default`, `wide`, `full`, or custom CSS length).
@@ -39,15 +55,3 @@ _Avoid_: Bleed element, wide block
 **Schema Extractor**:
 A Sätteri AST plugin that parses embedded MDX component props at build time to synthesize a unified JSON-LD `@graph`.
 _Avoid_: Schema generator, LD parser
-
-**Generic Schema Component**:
-A fallback `<Schema type="..." data={{...}} />` MDX component that injects arbitrary Schema.org entities into the page JSON-LD graph.
-_Avoid_: Meta component, raw schema tag
-
-**Article Scaffolder**:
-A CLI generator script (`pnpm new-article`) that automates branch creation, article bundle generation, initial commit, push, and draft PR creation.
-_Avoid_: Post generator, template script
-
-**Image Guardrail**:
-A repository validation rule that warns or halts builds if any unoptimized source image in an article bundle exceeds 2MB.
-_Avoid_: Asset limit, image filter

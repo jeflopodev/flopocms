@@ -1,0 +1,146 @@
+export const prerender = false;
+
+import type { APIRoute } from "astro";
+import { env } from "cloudflare:workers";
+import { getDb, type PostRow } from "../../../../lib/db";
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  try {
+    const db = getDb(locals);
+    const body = await request.json();
+    const { id } = body;
+
+    if (!id) {
+      return new Response(JSON.stringify({ success: false, error: "Missing post ID" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const post = await db
+      .prepare("SELECT * FROM posts WHERE id = ?")
+      .bind(id)
+      .first<PostRow>();
+
+    if (!post) {
+      return new Response(JSON.stringify({ success: false, error: "Post not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const slug = post.slug;
+    const today = new Date().toISOString().split("T")[0];
+    const pubDate = post.pub_date ? post.pub_date.split("T")[0] : today;
+
+    // Escape frontmatter single quotes
+    const safeTitle = (post.title || "").replace(/'/g, "\\'");
+    const safeDesc = (post.description || "").replace(/'/g, "\\'");
+    const heroLine = post.featured_image ? `heroImage: '${post.featured_image}'\n` : "";
+
+    const mdxContent = `---
+title: '${safeTitle}'
+description: '${safeDesc}'
+pubDate: '${pubDate}'
+${heroLine}author: '${post.author || "jeflopo"}'
+draft: false
+---
+
+${post.content_mdx || ""}
+`;
+
+    const githubPat = (env as any)?.GITHUB_PAT || (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
+
+    let committedToGitHub = false;
+
+    // 1. Commit to GitHub if GITHUB_PAT available
+    if (githubPat) {
+      const repo = "jeflopodev/blog-astro";
+      const branch = "main";
+      const targetPath = `src/content/blog/${slug}/index.mdx`;
+
+      let sha: string | undefined;
+      try {
+        const checkRes = await fetch(`https://api.github.com/repos/${repo}/contents/${targetPath}?ref=${branch}`, {
+          headers: {
+            Authorization: `Bearer ${githubPat}`,
+            "User-Agent": "Astro-Blog-Admin",
+            Accept: "application/vnd.github.v3+json",
+          },
+        });
+        if (checkRes.ok) {
+          const checkData = (await checkRes.json()) as any;
+          sha = checkData.sha;
+        }
+      } catch (err) {
+        console.warn("GitHub check sha warning:", err);
+      }
+
+      const base64Content = Buffer.from(mdxContent, "utf-8").toString("base64");
+      const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${targetPath}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${githubPat}`,
+          "User-Agent": "Astro-Blog-Admin",
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: `feat(blog): publish "${post.title}" by @${post.author || "jeflopo"}`,
+          content: base64Content,
+          branch,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+      if (putRes.ok) {
+        committedToGitHub = true;
+      } else {
+        const errorText = await putRes.text();
+        console.error("GitHub publish commit failed:", errorText);
+      }
+    }
+
+    // 2. Local filesystem write fallback when running locally in Node
+    if (typeof process !== "undefined" && process.versions?.node) {
+      try {
+        const fs = await import("node:fs");
+        const path = await import("node:path");
+        const targetDir = path.join(process.cwd(), "src", "content", "blog", slug);
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const filePath = path.join(targetDir, "index.mdx");
+        fs.writeFileSync(filePath, mdxContent, "utf-8");
+      } catch (localErr) {
+        console.warn("Local filesystem write error:", localErr);
+      }
+    }
+
+    // 3. Mark as published in D1
+    const now = new Date().toISOString();
+    await db
+      .prepare("UPDATE posts SET status = 'published', updated_at = ? WHERE id = ?")
+      .bind(now, id)
+      .run();
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        committedToGitHub,
+        slug,
+        status: "published",
+        message: committedToGitHub
+          ? "Published and committed to GitHub main!"
+          : "Saved to D1 and local files. Set GITHUB_PAT secret for remote git commits.",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (err: any) {
+    console.error("Publish post error:", err);
+    return new Response(
+      JSON.stringify({ success: false, error: err.message || "Failed to publish post" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+};

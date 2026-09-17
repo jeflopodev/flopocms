@@ -12,13 +12,19 @@
     "astro": "astro",
     "check:images": "node scripts/check-image-sizes.mjs",
     "deploy": "astro build && wrangler deploy",
-    "new-article": "node scripts/new-article.mjs"
+    "new-article": "node scripts/new-article.mjs",
+    "seed:users": "node scripts/seed-users.mjs",
+    "d1:migrate": "wrangler d1 migrations apply DB"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
+    "@astrojs/cloudflare": "^14.3.1",
     "@astrojs/markdown-satteri": "^0.4.1",
     "@astrojs/mdx": "^8.0.1",
+    "@codemirror/lang-markdown": "^6.5.2",
     "astro": "^7.3.2",
+    "astro-auto-import": "^0.6.0",
+    "codemirror": "^6.0.2",
     "sharp": "^0.35.4",
     "typescript": "^7.0.2"
   },
@@ -27,6 +33,6 @@
     "workerd": true
   },
   "devDependencies": {
-    "wrangler": "^4.131.2"
+    "wrangler": "^4.132.0"
   }
 }

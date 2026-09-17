@@ -1,0 +1,28 @@
+---
+export const prerender = false;
+
+import { getDb } from "../../../lib/db";
+
+const db = getDb(Astro.locals);
+const user = Astro.locals.user || { username: "jeflopo" };
+
+const id = crypto.randomUUID();
+const suffix = Math.random().toString(36).substring(2, 7);
+const slug = `untitled-${suffix}`;
+const title = "Untitled Article";
+const now = new Date().toISOString();
+
+try {
+  await db
+    .prepare(
+      `INSERT INTO posts (id, slug, title, description, category, tags, author, featured_image, content_mdx, status, pub_date, created_at, updated_at)
+       VALUES (?, ?, ?, '', 'General', '[]', ?, '', '', 'draft', ?, ?, ?)`
+    )
+    .bind(id, slug, title, user.username, now, now, now)
+    .run();
+} catch (err) {
+  console.error("Failed to create new draft post:", err);
+}
+
+return Astro.redirect(`/admin/posts/${id}`);
+---

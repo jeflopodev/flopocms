@@ -1,0 +1,1500 @@
+---
+export const prerender = false;
+
+import { getDb, type PostRow } from "../../../lib/db";
+import "../../../styles/global.css";
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect("/admin/posts");
+}
+
+const db = getDb(Astro.locals);
+const post = await db
+  .prepare("SELECT * FROM posts WHERE id = ?")
+  .bind(id)
+  .first<PostRow>();
+
+if (!post) {
+  return Astro.redirect("/admin/posts");
+}
+
+const user = Astro.locals.user || { username: post.author || "jeflopo" };
+
+// Parse tags
+let parsedTags: string[] = [];
+try {
+  if (post.tags) {
+    const t = JSON.parse(post.tags);
+    if (Array.isArray(t)) parsedTags = t;
+  }
+} catch {
+  if (post.tags) parsedTags = [post.tags];
+}
+
+const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date().toISOString().split("T")[0];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{post.title || "Untitled Article"} | Editor</title>
+  </head>
+  <body class="editor-workspace-body">
+    <!-- Top Action Bar -->
+    <header class="editor-topbar">
+      <div class="topbar-left">
+        <a href="/admin/posts" class="back-link" title="Back to Articles">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          <span class="back-text">Articles</span>
+        </a>
+
+        <div class="topbar-divider"></div>
+
+        <div class="article-meta-header">
+          <input
+            type="text"
+            id="topbar-title-input"
+            class="topbar-title-input"
+            value={post.title}
+            placeholder="Article Title..."
+          />
+          <span id="post-status-badge" class:list={["status-tag", post.status]}>
+            {post.status === "published" ? "Published" : "Draft"}
+          </span>
+        </div>
+      </div>
+
+      <div class="topbar-center">
+        <div id="save-indicator" class="save-indicator saved">
+          <span class="indicator-dot"></span>
+          <span class="indicator-text">Saved to D1</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button type="button" id="manual-save-btn" class="btn btn-secondary" title="Save changes now">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Save
+        </button>
+
+        <a
+          href={`/blog/${post.slug}`}
+          target="_blank"
+          id="preview-link"
+          class="btn btn-secondary"
+          title="Preview live article"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Preview
+        </a>
+
+        <div class="topbar-divider"></div>
+
+        <!-- Right Panels Toggles -->
+        <button
+          type="button"
+          id="toggle-settings-btn"
+          class="panel-toggle-btn active"
+          title="Toggle Settings Panel"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
+
+        <button
+          type="button"
+          id="toggle-blocks-btn"
+          class="panel-toggle-btn"
+          title="Toggle Blocks Panel"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <span>Blocks</span>
+        </button>
+
+        <button type="button" id="publish-btn" class="btn btn-primary" title="Publish to GitHub main branch">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          Publish
+        </button>
+      </div>
+    </header>
+
+    <!-- Workspace Viewport -->
+    <main class="editor-workspace">
+      <!-- Center: CodeMirror Editor & Toolbar -->
+      <div class="editor-stage">
+        <!-- Formatting Toolbar -->
+        <div class="editor-toolbar">
+          <div class="toolbar-group">
+            <button type="button" class="tool-btn" data-tool="bold" title="Bold (**text**)">
+              <strong>B</strong>
+            </button>
+            <button type="button" class="tool-btn" data-tool="italic" title="Italic (*text*)">
+              <em>I</em>
+            </button>
+            <button type="button" class="tool-btn" data-tool="strike" title="Strikethrough (~~text~~)">
+              <s>S</s>
+            </button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="toolbar-group">
+            <button type="button" class="tool-btn" data-tool="h2" title="Heading 2 (## )">H2</button>
+            <button type="button" class="tool-btn" data-tool="h3" title="Heading 3 (### )">H3</button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="toolbar-group">
+            <button type="button" class="tool-btn" data-tool="link" title="Link ([text](url))">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </button>
+            <button type="button" class="tool-btn" data-tool="quote" title="Quote (> )">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
+                <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
+              </svg>
+            </button>
+            <button type="button" class="tool-btn" data-tool="code" title="Code Block (```)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="toolbar-group">
+            <button type="button" class="tool-btn" data-tool="bullet" title="Bullet List (- )">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"/>
+                <line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                <line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            <button type="button" class="tool-btn" data-tool="numbered" title="Numbered List (1. )">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="10" y1="6" x2="21" y2="6"/>
+                <line x1="10" y1="12" x2="21" y2="12"/>
+                <line x1="10" y1="18" x2="21" y2="18"/>
+                <path d="M4 6h1v4"/>
+                <path d="M4 10h2"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <!-- Image Upload Tool -->
+          <div class="toolbar-group">
+            <input type="file" id="editor-image-upload-input" accept="image/*" style="display: none;" />
+            <button type="button" id="editor-image-upload-btn" class="tool-btn image-btn" title="Upload co-located image (max 2MB)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span>Add Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- CodeMirror Host Element -->
+        <div id="codemirror-container" class="codemirror-container"></div>
+      </div>
+
+      <!-- Right Docked Drawer (Settings by default, Blocks when toggled) -->
+      <aside id="editor-drawer" class="editor-drawer open">
+        <!-- Drawer Header -->
+        <div class="drawer-header">
+          <div class="drawer-title-group">
+            <h2 id="drawer-heading" class="drawer-heading">Article Settings</h2>
+            <span id="drawer-badge" class="drawer-badge">D1 Synced</span>
+          </div>
+          <button type="button" id="drawer-close-btn" class="drawer-close-btn" title="Close Panel (Full Width)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Settings View Content -->
+        <div id="settings-panel-content" class="panel-content active">
+          <div class="form-group">
+            <label for="post-title-field">Article Title</label>
+            <input
+              type="text"
+              id="post-title-field"
+              class="form-control"
+              value={post.title}
+              placeholder="Enter article title..."
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="post-slug-field">URL Slug</label>
+            <div class="slug-input-wrapper">
+              <span class="slug-prefix">/blog/</span>
+              <input
+                type="text"
+                id="post-slug-field"
+                class="form-control slug-field"
+                value={post.slug}
+                placeholder="url-slug"
+              />
+            </div>
+            <span class="field-hint">Co-located folder: <code>src/content/blog/{post.slug}/</code></span>
+          </div>
+
+          <div class="form-group">
+            <label for="post-desc-field">SEO Description</label>
+            <textarea
+              id="post-desc-field"
+              class="form-control"
+              rows="3"
+              placeholder="Concise summary for search engines and social cards..."
+            >{post.description}</textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="post-category-field">Category</label>
+              <select id="post-category-field" class="form-control">
+                <option value="Web Development" selected={post.category === "Web Development"}>Web Development</option>
+                <option value="Astro" selected={post.category === "Astro"}>Astro</option>
+                <option value="Performance" selected={post.category === "Performance"}>Performance</option>
+                <option value="CSS" selected={post.category === "CSS"}>CSS</option>
+                <option value="TypeScript" selected={post.category === "TypeScript"}>TypeScript</option>
+                <option value="General" selected={!post.category || post.category === "General"}>General</option>
+              </select>
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="post-author-field">Author</label>
+              <select id="post-author-field" class="form-control">
+                <option value="jeflopo" selected={post.author === "jeflopo"}>@jeflopo</option>
+                <option value="aflopo" selected={post.author === "aflopo"}>@aflopo</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="post-pubdate-field">Publication Date</label>
+              <input
+                type="date"
+                id="post-pubdate-field"
+                class="form-control"
+                value={pubDateFormatted}
+              />
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="post-status-select">Status</label>
+              <select id="post-status-select" class="form-control">
+                <option value="draft" selected={post.status === "draft"}>Draft</option>
+                <option value="published" selected={post.status === "published"}>Published</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="post-tags-field">Tags (Comma-separated)</label>
+            <input
+              type="text"
+              id="post-tags-field"
+              class="form-control"
+              value={parsedTags.join(", ")}
+              placeholder="e.g. astro, cloudflare, performance"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="post-image-field">Featured / Hero Image</label>
+            <input
+              type="text"
+              id="post-image-field"
+              class="form-control"
+              value={post.featured_image || ""}
+              placeholder="./hero.webp"
+            />
+            <span class="field-hint">Relative co-located path: <code>./hero.webp</code></span>
+          </div>
+        </div>
+
+        <!-- Blocks View Content -->
+        <div id="blocks-panel-content" class="panel-content">
+          <div class="blocks-intro">
+            <p>
+              Click any block card to insert it directly into your article. Auto-import enables zero manual import statements!
+            </p>
+          </div>
+
+          <!-- Amazon Product Card -->
+          <div class="block-card" data-block="amazon">
+            <div class="block-card-header">
+              <div class="block-icon amazon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"/>
+                  <circle cx="20" cy="21" r="1"/>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;AmazonProduct /&gt;</h3>
+                <span class="block-desc">Interactive product showcase card</span>
+              </div>
+            </div>
+            <p class="block-preview-code">
+              &lt;AmazonProduct asin="B0..." title="..." price="$..." /&gt;
+            </p>
+            <button type="button" class="btn-insert-block" data-insert="amazon">
+              + Insert Product Block
+            </button>
+          </div>
+
+          <!-- YouTube Embed Card -->
+          <div class="block-card" data-block="youtube">
+            <div class="block-card-header">
+              <div class="block-icon youtube">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;YouTube /&gt;</h3>
+                <span class="block-desc">Responsive video with breakout stretch</span>
+              </div>
+            </div>
+            <p class="block-preview-code">
+              &lt;YouTube id="..." title="..." stretch="wide" /&gt;
+            </p>
+            <button type="button" class="btn-insert-block" data-insert="youtube">
+              + Insert YouTube Video
+            </button>
+          </div>
+
+          <!-- JSON-LD Schema Card -->
+          <div class="block-card" data-block="schema">
+            <div class="block-card-header">
+              <div class="block-icon schema">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6a1.78 1.78 0 0 0 0-3.2z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;Schema /&gt;</h3>
+                <span class="block-desc">Structured FAQ / Article JSON-LD</span>
+              </div>
+            </div>
+            <p class="block-preview-code">
+              &lt;Schema type="FAQPage"&gt;...&lt;/Schema&gt;
+            </p>
+            <button type="button" class="btn-insert-block" data-insert="schema">
+              + Insert Schema Block
+            </button>
+          </div>
+
+          <!-- GitHub Style Alerts -->
+          <div class="block-card" data-block="alert">
+            <div class="block-card-header">
+              <div class="block-icon alert">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">Callout Alerts</h3>
+                <span class="block-desc">GitHub-style note, tip, or warning</span>
+              </div>
+            </div>
+            <div class="callout-insert-grid">
+              <button type="button" class="btn-callout" data-callout="NOTE">Note</button>
+              <button type="button" class="btn-callout" data-callout="TIP">Tip</button>
+              <button type="button" class="btn-callout" data-callout="IMPORTANT">Important</button>
+              <button type="button" class="btn-callout" data-callout="WARNING">Warning</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Initial Data Payload -->
+    <script id="initial-post-data" type="application/json" set:html={JSON.stringify({
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      description: post.description || "",
+      category: post.category || "General",
+      tags: parsedTags,
+      author: post.author || "jeflopo",
+      featured_image: post.featured_image || "",
+      content_mdx: post.content_mdx || "",
+      status: post.status || "draft",
+      pub_date: post.pub_date || "",
+    })} />
+
+    <!-- CodeMirror & Editor Logic Script -->
+    <script>
+      import { EditorView, basicSetup } from "codemirror";
+      import { markdown } from "@codemirror/lang-markdown";
+
+      // Parse initial data
+      const dataScript = document.getElementById("initial-post-data");
+      const postData = JSON.parse(dataScript?.textContent || "{}");
+
+      // DOM Elements
+      const container = document.getElementById("codemirror-container");
+      const topbarTitleInput = document.getElementById("topbar-title-input") as HTMLInputElement;
+      const postTitleField = document.getElementById("post-title-field") as HTMLInputElement;
+      const postSlugField = document.getElementById("post-slug-field") as HTMLInputElement;
+      const postDescField = document.getElementById("post-desc-field") as HTMLTextAreaElement;
+      const postCategoryField = document.getElementById("post-category-field") as HTMLSelectElement;
+      const postAuthorField = document.getElementById("post-author-field") as HTMLSelectElement;
+      const postPubdateField = document.getElementById("post-pubdate-field") as HTMLInputElement;
+      const postStatusSelect = document.getElementById("post-status-select") as HTMLSelectElement;
+      const postTagsField = document.getElementById("post-tags-field") as HTMLInputElement;
+      const postImageField = document.getElementById("post-image-field") as HTMLInputElement;
+      const saveIndicator = document.getElementById("save-indicator");
+      const saveIndicatorText = saveIndicator?.querySelector(".indicator-text");
+      const manualSaveBtn = document.getElementById("manual-save-btn");
+      const publishBtn = document.getElementById("publish-btn");
+      const previewLink = document.getElementById("preview-link") as HTMLAnchorElement;
+      const statusBadge = document.getElementById("post-status-badge");
+
+      // Drawer Toggles
+      const drawer = document.getElementById("editor-drawer");
+      const drawerHeading = document.getElementById("drawer-heading");
+      const drawerCloseBtn = document.getElementById("drawer-close-btn");
+      const toggleSettingsBtn = document.getElementById("toggle-settings-btn");
+      const toggleBlocksBtn = document.getElementById("toggle-blocks-btn");
+      const settingsPanel = document.getElementById("settings-panel-content");
+      const blocksPanel = document.getElementById("blocks-panel-content");
+
+      // State
+      let activePanel: "settings" | "blocks" | "none" = "settings";
+      let isSaving = false;
+      let isDirty = false;
+      let autoSaveTimer: any = null;
+
+      // Initialize CodeMirror 6
+      const themeConfig = EditorView.theme({
+        "&": {
+          height: "100%",
+          fontSize: "15px",
+          color: "var(--text-primary)",
+          backgroundColor: "var(--bg-surface)",
+        },
+        ".cm-scroller": {
+          overflow: "auto",
+          fontFamily: "var(--font-mono)",
+          lineHeight: "1.65",
+        },
+        ".cm-content": {
+          padding: "24px 32px",
+          maxWidth: "960px",
+          margin: "0 auto",
+        },
+        ".cm-line": {
+          padding: "0",
+        },
+        "&.cm-focused .cm-cursor": {
+          borderLeftColor: "var(--primary)",
+          borderLeftWidth: "2px",
+        },
+        "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+          backgroundColor: "rgba(79, 70, 229, 0.18)",
+        },
+        ".cm-gutters": {
+          backgroundColor: "var(--bg-surface-elevated)",
+          color: "var(--text-muted)",
+          borderRight: "1px solid var(--border-subtle)",
+          paddingRight: "8px",
+        },
+      });
+
+      const editorView = new EditorView({
+        doc: postData.content_mdx || "",
+        extensions: [
+          basicSetup,
+          markdown(),
+          EditorView.lineWrapping,
+          themeConfig,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              markDirty();
+            }
+          }),
+        ],
+        parent: container!,
+      });
+
+      // Synchronize title inputs
+      topbarTitleInput?.addEventListener("input", (e) => {
+        const val = (e.target as HTMLInputElement).value;
+        if (postTitleField) postTitleField.value = val;
+        markDirty();
+      });
+
+      postTitleField?.addEventListener("input", (e) => {
+        const val = (e.target as HTMLInputElement).value;
+        if (topbarTitleInput) topbarTitleInput.value = val;
+        markDirty();
+      });
+
+      // Form change listeners
+      [postSlugField, postDescField, postCategoryField, postAuthorField, postPubdateField, postStatusSelect, postTagsField, postImageField].forEach((el) => {
+        el?.addEventListener("input", () => {
+          if (el === postSlugField && previewLink) {
+            previewLink.href = `/blog/${postSlugField.value}`;
+          }
+          markDirty();
+        });
+      });
+
+      // Panel Navigation Logic
+      function setPanel(panel: "settings" | "blocks" | "none") {
+        activePanel = panel;
+        if (panel === "none") {
+          drawer?.classList.remove("open");
+          toggleSettingsBtn?.classList.remove("active");
+          toggleBlocksBtn?.classList.remove("active");
+        } else if (panel === "settings") {
+          drawer?.classList.add("open");
+          settingsPanel?.classList.add("active");
+          blocksPanel?.classList.remove("active");
+          if (drawerHeading) drawerHeading.textContent = "Article Settings";
+          toggleSettingsBtn?.classList.add("active");
+          toggleBlocksBtn?.classList.remove("active");
+        } else if (panel === "blocks") {
+          drawer?.classList.add("open");
+          blocksPanel?.classList.add("active");
+          settingsPanel?.classList.remove("active");
+          if (drawerHeading) drawerHeading.textContent = "Component Blocks";
+          toggleBlocksBtn?.classList.add("active");
+          toggleSettingsBtn?.classList.remove("active");
+        }
+      }
+
+      toggleSettingsBtn?.addEventListener("click", () => {
+        if (activePanel === "settings") {
+          setPanel("none");
+        } else {
+          setPanel("settings");
+        }
+      });
+
+      toggleBlocksBtn?.addEventListener("click", () => {
+        if (activePanel === "blocks") {
+          setPanel("none");
+        } else {
+          setPanel("blocks");
+        }
+      });
+
+      drawerCloseBtn?.addEventListener("click", () => {
+        setPanel("none");
+      });
+
+      // Helper for snippet insertion
+      function insertSnippet(snippet: string) {
+        const { from, to } = editorView.state.selection.main;
+        editorView.dispatch({
+          changes: { from, to, insert: snippet },
+          selection: { anchor: from + snippet.length },
+        });
+        editorView.focus();
+        markDirty();
+      }
+
+      function wrapSelection(prefix: string, suffix: string) {
+        const { from, to } = editorView.state.selection.main;
+        const selected = editorView.state.sliceDoc(from, to) || "text";
+        const snippet = `${prefix}${selected}${suffix}`;
+        editorView.dispatch({
+          changes: { from, to, insert: snippet },
+          selection: { anchor: from + prefix.length, head: from + snippet.length - suffix.length },
+        });
+        editorView.focus();
+        markDirty();
+      }
+
+      // Formatting Toolbar Click Handlers
+      document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tool = (btn as HTMLElement).dataset.tool;
+          switch (tool) {
+            case "bold":
+              wrapSelection("**", "**");
+              break;
+            case "italic":
+              wrapSelection("*", "*");
+              break;
+            case "strike":
+              wrapSelection("~~", "~~");
+              break;
+            case "h2":
+              insertSnippet("\n## Section Title\n");
+              break;
+            case "h3":
+              insertSnippet("\n### Subsection Title\n");
+              break;
+            case "link":
+              wrapSelection("[", "](https://example.com)");
+              break;
+            case "quote":
+              insertSnippet("\n> Quoted paragraph\n");
+              break;
+            case "code":
+              insertSnippet("\n```javascript\n// code snippet\n```\n");
+              break;
+            case "bullet":
+              insertSnippet("\n- Item 1\n- Item 2\n");
+              break;
+            case "numbered":
+              insertSnippet("\n1. First step\n2. Second step\n");
+              break;
+          }
+        });
+      });
+
+      // Component Blocks Insertion
+      document.querySelectorAll(".btn-insert-block").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const target = e.currentTarget as HTMLElement;
+          const type = target.dataset.insert;
+          if (type === "amazon") {
+            insertSnippet(
+              `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="./product.webp"\n/>\n`
+            );
+          } else if (type === "youtube") {
+            insertSnippet(
+              `\n<YouTube id="dQw4w9WgXcQ" title="Video Title" stretch="wide" />\n`
+            );
+          } else if (type === "schema") {
+            insertSnippet(
+              `\n<Schema type="FAQPage">\n  {JSON.stringify({\n    "@context": "https://schema.org",\n    "@type": "FAQPage",\n    "mainEntity": [\n      {\n        "@type": "Question",\n        "name": "What is Astro?",\n        "acceptedAnswer": {\n          "@type": "Answer",\n          "text": "Astro is the web framework for content-driven websites."\n        }\n      }\n    ]\n  })}\n</Schema>\n`
+            );
+          }
+        });
+      });
+
+      // Callouts insertion
+      document.querySelectorAll(".btn-callout").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const callout = (e.currentTarget as HTMLElement).dataset.callout || "NOTE";
+          insertSnippet(`\n> [!${callout}]\n> Enter callout explanation here.\n`);
+        });
+      });
+
+      // Image Upload Handling
+      const imageFileInput = document.getElementById("editor-image-upload-input") as HTMLInputElement;
+      const imageUploadBtn = document.getElementById("editor-image-upload-btn");
+
+      imageUploadBtn?.addEventListener("click", () => {
+        imageFileInput?.click();
+      });
+
+      imageFileInput?.addEventListener("change", async () => {
+        const file = imageFileInput.files?.[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+          alert(`Image exceeds 2MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please optimize before uploading.`);
+          imageFileInput.value = "";
+          return;
+        }
+
+        const currentSlug = postSlugField.value.trim() || postData.slug;
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("slug", currentSlug);
+
+        if (imageUploadBtn) {
+          imageUploadBtn.innerHTML = `<span>Uploading...</span>`;
+        }
+
+        try {
+          const res = await fetch("/api/admin/assets/upload", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.success && data.snippet) {
+            insertSnippet(`\n${data.snippet}\n`);
+            // Set as hero image if hero image is empty
+            if (!postImageField.value) {
+              postImageField.value = `./${data.filename}`;
+              markDirty();
+            }
+          } else {
+            alert(data.error || "Failed to upload image");
+          }
+        } catch {
+          alert("Error contacting upload server");
+        } finally {
+          imageFileInput.value = "";
+          if (imageUploadBtn) {
+            imageUploadBtn.innerHTML = `
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span>Add Image</span>
+            `;
+          }
+        }
+      });
+
+      // Save logic
+      function markDirty() {
+        isDirty = true;
+        if (saveIndicator) {
+          saveIndicator.className = "save-indicator unsaved";
+          if (saveIndicatorText) saveIndicatorText.textContent = "Unsaved changes";
+        }
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+          savePost();
+        }, 1500);
+      }
+
+      async function savePost() {
+        if (isSaving) return;
+        isSaving = true;
+
+        if (saveIndicator) {
+          saveIndicator.className = "save-indicator saving";
+          if (saveIndicatorText) saveIndicatorText.textContent = "Saving to D1...";
+        }
+
+        const tagsRaw = postTagsField?.value || "";
+        const tagsArray = tagsRaw
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+        const payload = {
+          id: postData.id,
+          slug: postSlugField.value.trim(),
+          title: topbarTitleInput.value.trim() || "Untitled Article",
+          description: postDescField.value.trim(),
+          category: postCategoryField.value,
+          tags: tagsArray,
+          author: postAuthorField.value,
+          featured_image: postImageField.value.trim(),
+          content_mdx: editorView.state.doc.toString(),
+          status: postStatusSelect.value,
+          pub_date: postPubdateField.value,
+        };
+
+        try {
+          const res = await fetch("/api/admin/posts/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            isDirty = false;
+            if (saveIndicator) {
+              saveIndicator.className = "save-indicator saved";
+              if (saveIndicatorText) saveIndicatorText.textContent = "Saved to D1";
+            }
+          } else {
+            if (saveIndicator) {
+              saveIndicator.className = "save-indicator error";
+              if (saveIndicatorText) saveIndicatorText.textContent = data.error || "Save error";
+            }
+          }
+        } catch {
+          if (saveIndicator) {
+            saveIndicator.className = "save-indicator error";
+            if (saveIndicatorText) saveIndicatorText.textContent = "Connection error";
+          }
+        } finally {
+          isSaving = false;
+        }
+      }
+
+      manualSaveBtn?.addEventListener("click", () => {
+        savePost();
+      });
+
+      // Publish to GitHub Logic
+      publishBtn?.addEventListener("click", async () => {
+        const title = topbarTitleInput.value.trim() || postData.title;
+        const confirmPublish = confirm(`Are you sure you want to publish "${title}" to GitHub main branch?`);
+        if (!confirmPublish) return;
+
+        // First save draft
+        await savePost();
+
+        publishBtn.setAttribute("disabled", "true");
+        publishBtn.innerHTML = `<span>Publishing...</span>`;
+
+        try {
+          const res = await fetch("/api/admin/posts/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: postData.id }),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            alert(data.message || "Article published successfully!");
+            if (statusBadge) {
+              statusBadge.className = "status-tag published";
+              statusBadge.textContent = "Published";
+            }
+            if (postStatusSelect) {
+              postStatusSelect.value = "published";
+            }
+          } else {
+            alert(data.error || "Publishing failed");
+          }
+        } catch {
+          alert("Error contacting publishing endpoint");
+        } finally {
+          publishBtn.removeAttribute("disabled");
+          publishBtn.innerHTML = `
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            Publish
+          `;
+        }
+      });
+    </script>
+  </body>
+</html>
+
+<style>
+  /* Standalone Full-Viewport Editor */
+  .editor-workspace-body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Top Bar */
+  .editor-topbar {
+    height: 56px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.25rem;
+    gap: 1rem;
+    flex-shrink: 0;
+    z-index: 20;
+  }
+
+  .topbar-left,
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+  }
+
+  .back-link:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-elevated);
+  }
+
+  .topbar-divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border-subtle);
+  }
+
+  .article-meta-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .topbar-title-input {
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    width: 280px;
+    transition: all var(--transition-fast);
+  }
+
+  .topbar-title-input:hover,
+  .topbar-title-input:focus {
+    border-color: var(--border-strong);
+    background: var(--bg-surface-elevated);
+    outline: none;
+  }
+
+  .status-tag {
+    font-size: 0.725rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius-full);
+  }
+
+  .status-tag.draft {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .status-tag.published {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  /* Center Save Indicator */
+  .save-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+    background: var(--bg-surface-elevated);
+  }
+
+  .indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .save-indicator.saved .indicator-dot {
+    background: #10b981;
+  }
+  .save-indicator.saved {
+    color: var(--text-muted);
+  }
+
+  .save-indicator.saving .indicator-dot {
+    background: #f59e0b;
+    animation: pulse 1s infinite;
+  }
+  .save-indicator.saving {
+    color: #b45309;
+  }
+
+  .save-indicator.unsaved .indicator-dot {
+    background: #9ca3af;
+  }
+  .save-indicator.unsaved {
+    color: var(--text-muted);
+  }
+
+  .save-indicator.error .indicator-dot {
+    background: #ef4444;
+  }
+  .save-indicator.error {
+    color: #b91c1c;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.825rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-secondary {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--border-strong);
+    background: #e5e7eb;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .btn-primary:hover {
+    background: var(--primary-hover);
+  }
+
+  /* Panel Toggle Buttons */
+  .panel-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.825rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .panel-toggle-btn:hover {
+    background: var(--bg-surface-elevated);
+    color: var(--text-primary);
+  }
+
+  .panel-toggle-btn.active {
+    background: var(--primary-surface);
+    color: var(--primary);
+    border-color: var(--primary-light);
+    font-weight: 600;
+  }
+
+  /* Workspace Layout */
+  .editor-workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .editor-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    background: var(--bg-surface);
+  }
+
+  /* Toolbar */
+  .editor-toolbar {
+    height: 42px;
+    background: var(--bg-surface-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    gap: 0.5rem;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border-strong);
+    margin: 0 0.25rem;
+  }
+
+  .tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.35rem;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.825rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .tool-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tool-btn.image-btn {
+    gap: 0.35rem;
+    padding: 0 0.6rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    font-weight: 500;
+  }
+
+  .tool-btn.image-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  /* CodeMirror Container */
+  .codemirror-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Drawer Panel (Right Side) */
+  .editor-drawer {
+    width: 360px;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-subtle);
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+    z-index: 10;
+  }
+
+  .editor-drawer.open {
+    display: flex;
+  }
+
+  .drawer-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .drawer-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .drawer-heading {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .drawer-badge {
+    font-size: 0.675rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    background: var(--primary-surface);
+    color: var(--primary);
+    border-radius: var(--radius-full);
+  }
+
+  .drawer-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .drawer-close-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-elevated);
+  }
+
+  /* Panels Content */
+  .panel-content {
+    display: none;
+    padding: 1.25rem;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .panel-content.active {
+    display: flex;
+  }
+
+  /* Form Elements */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .flex-1 {
+    flex: 1;
+  }
+
+  .form-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color var(--transition-fast);
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-surface);
+  }
+
+  .slug-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    overflow: hidden;
+  }
+
+  .slug-prefix {
+    padding: 0.5rem 0.6rem;
+    background: var(--bg-surface-elevated);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  .form-control.slug-field {
+    border: none;
+    font-family: var(--font-mono);
+  }
+
+  .form-control.slug-field:focus {
+    box-shadow: none;
+  }
+
+  .field-hint {
+    font-size: 0.725rem;
+    color: var(--text-muted);
+  }
+
+  .field-hint code {
+    font-family: var(--font-mono);
+    background: var(--bg-surface-elevated);
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+  }
+
+  /* Blocks Panel Styles */
+  .blocks-intro p {
+    margin: 0;
+    font-size: 0.825rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .block-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: all var(--transition-fast);
+  }
+
+  .block-card:hover {
+    border-color: var(--primary-light);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .block-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .block-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .block-icon.amazon {
+    background: #fff7ed;
+    color: #ea580c;
+  }
+
+  .block-icon.youtube {
+    background: #fef2f2;
+    color: #dc2626;
+  }
+
+  .block-icon.schema {
+    background: #f0fdf4;
+    color: #16a34a;
+  }
+
+  .block-icon.alert {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  .block-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+  }
+
+  .block-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .block-preview-code {
+    margin: 0;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    background: var(--bg-surface-elevated);
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .btn-insert-block {
+    width: 100%;
+    padding: 0.45rem;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-insert-block:hover {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+
+  .callout-insert-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .btn-callout {
+    padding: 0.4rem 0.6rem;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 0.775rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-callout:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+</style>
