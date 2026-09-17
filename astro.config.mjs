@@ -17,9 +17,11 @@ export default defineConfig({
   integrations: [
     AutoImport({
       imports: [
-        './src/components/amazon-product.astro',
-        './src/components/youtube.astro',
-        './src/components/schema.astro',
+        {
+          './src/components/amazon-product.astro': [['default', 'AmazonProduct']],
+          './src/components/youtube.astro': [['default', 'YouTube']],
+          './src/components/schema.astro': [['default', 'Schema']],
+        },
       ],
     }),
     mdx(),
