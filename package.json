@@ -16,7 +16,7 @@
     "new-article": "node scripts/new-article.mjs",
     "seed:users": "node scripts/seed-users.mjs",
     "d1:migrate": "wrangler d1 migrations apply DB",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "astro sync && tsc --noEmit"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
