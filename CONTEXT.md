@@ -28,6 +28,10 @@ _Avoid_: Backoffice, control panel, CMS UI
 A full-screen CodeMirror workspace featuring a top action bar, markdown formatting toolbar, and exclusive right-docked side panels (Settings and Blocks).
 _Avoid_: Text box, edit page
 
+**Profile & Security**:
+The user profile page (`/admin/profile`) where an authenticated Editor views account stats and securely updates their PBKDF2 password.
+_Avoid_: User settings, account view
+
 **Settings Panel**:
 The default right-docked editor panel managing frontmatter metadata (title, slug, author, category, tags, featured image, pubDate).
 _Avoid_: Metadata sidebar, post settings
