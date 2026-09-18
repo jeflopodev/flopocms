@@ -16,6 +16,8 @@ interface SavePostPayload {
   content_mdx?: string;
   status?: "draft" | "published";
   template?: "default" | "two-column";
+  default_width?: string;
+  wide_width?: string;
   pub_date?: string;
 }
 
@@ -36,6 +38,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       content_mdx = "",
       status = "draft",
       template = "default",
+      default_width = "60rem",
+      wide_width = "70rem",
       pub_date,
     } = body;
 
@@ -94,6 +98,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
           contentMdx: content_mdx,
           status,
           template,
+          defaultWidth: default_width,
+          wideWidth: wide_width,
           pubDate: effectivePubDate,
           updatedAt: now,
         })
@@ -111,6 +117,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         contentMdx: content_mdx,
         status,
         template,
+        defaultWidth: default_width,
+        wideWidth: wide_width,
         pubDate: effectivePubDate,
         createdAt: now,
         updatedAt: now,

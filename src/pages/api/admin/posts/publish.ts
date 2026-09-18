@@ -48,12 +48,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const safeDesc = (post.description || "").replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
     const heroLine = post.featuredImage ? `heroImage: '${post.featuredImage.replace(/'/g, "''")}'\n` : "";
     const templateLine = `template: '${post.template || "default"}'\n`;
+    const defaultWidthLine = `defaultWidth: '${post.defaultWidth || "60rem"}'\n`;
+    const wideWidthLine = `wideWidth: '${post.wideWidth || "70rem"}'\n`;
 
     const mdxContent = `---
 title: '${safeTitle}'
 description: '${safeDesc}'
 pubDate: '${pubDate}'
-${heroLine}${templateLine}author: '${post.author || "jeflopo"}'
+${heroLine}${templateLine}${defaultWidthLine}${wideWidthLine}author: '${post.author || "jeflopo"}'
 draft: false
 ---
 

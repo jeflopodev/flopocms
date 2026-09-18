@@ -40,6 +40,8 @@ export const posts = sqliteTable(
     contentMdx: text("content_mdx").default("").notNull(),
     status: text("status", { enum: ["draft", "published"] }).default("draft").notNull(),
     template: text("template", { enum: ["default", "two-column"] }).default("default").notNull(),
+    defaultWidth: text("default_width").default("60rem").notNull(),
+    wideWidth: text("wide_width").default("70rem").notNull(),
     pubDate: text("pub_date").default(sql`CURRENT_TIMESTAMP`).notNull(),
     createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
     updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

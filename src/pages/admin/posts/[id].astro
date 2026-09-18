@@ -313,6 +313,33 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
             <span class="field-hint">Single column vs Two columns (article | aside)</span>
           </div>
 
+          <!-- Content & Wide Width Settings -->
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="post-default-width-field">Default Width</label>
+              <input
+                type="text"
+                id="post-default-width-field"
+                class="form-control"
+                value={post.defaultWidth || (post as any).default_width || "60rem"}
+                placeholder="60rem"
+              />
+              <span class="field-hint">Standard prose (e.g. <code>60rem</code>)</span>
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="post-wide-width-field">Wide Width</label>
+              <input
+                type="text"
+                id="post-wide-width-field"
+                class="form-control"
+                value={post.wideWidth || (post as any).wide_width || "70rem"}
+                placeholder="70rem"
+              />
+              <span class="field-hint">Stretch breakout (e.g. <code>70rem</code>)</span>
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="post-desc-field">SEO Description</label>
             <textarea
@@ -614,6 +641,8 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       content_mdx: post.contentMdx || (post as any).content_mdx || "",
       status: post.status || "draft",
       template: post.template || "default",
+      default_width: post.defaultWidth || (post as any).default_width || "60rem",
+      wide_width: post.wideWidth || (post as any).wide_width || "70rem",
       pub_date: post.pubDate || (post as any).pub_date || "",
     })} />
 
@@ -639,6 +668,8 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       const postSlugField = document.getElementById("post-slug-field") as HTMLInputElement;
       const resyncSlugBtn = document.getElementById("resync-slug-btn");
       const postTemplateSelect = document.getElementById("post-template-select") as HTMLSelectElement;
+      const postDefaultWidthField = document.getElementById("post-default-width-field") as HTMLInputElement;
+      const postWideWidthField = document.getElementById("post-wide-width-field") as HTMLInputElement;
       const postDescField = document.getElementById("post-desc-field") as HTMLTextAreaElement;
       const postCategoryField = document.getElementById("post-category-field") as HTMLSelectElement;
       const postAuthorField = document.getElementById("post-author-field") as HTMLSelectElement;
@@ -763,7 +794,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       });
 
       // Form change listeners
-      [postTemplateSelect, postDescField, postCategoryField, postAuthorField, postPubdateField, postStatusSelect, postTagsField, postImageField].forEach((el) => {
+      [postTemplateSelect, postDefaultWidthField, postWideWidthField, postDescField, postCategoryField, postAuthorField, postPubdateField, postStatusSelect, postTagsField, postImageField].forEach((el) => {
         el?.addEventListener("input", () => {
           markDirty();
         });
@@ -1252,6 +1283,8 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
           content_mdx: editorView.state.doc.toString(),
           status: postStatusSelect.value,
           template: postTemplateSelect.value || "default",
+          default_width: postDefaultWidthField?.value.trim() || "60rem",
+          wide_width: postWideWidthField?.value.trim() || "70rem",
           pub_date: postPubdateField.value ? `${postPubdateField.value}T12:00:00.000Z` : undefined,
         };
 

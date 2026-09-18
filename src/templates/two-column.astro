@@ -4,7 +4,17 @@ import type { CollectionEntry } from "astro:content";
 
 type Props = CollectionEntry<"blog">["data"];
 
-const { title, description, pubDate, updatedDate, heroImage, draft, author } = Astro.props;
+const {
+  title,
+  description,
+  pubDate,
+  updatedDate,
+  heroImage,
+  draft,
+  author,
+  defaultWidth = "60rem",
+  wideWidth = "70rem",
+} = Astro.props;
 
 const formattedPubDate = pubDate ? new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -19,7 +29,10 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 }).format(updatedDate) : null;
 ---
 
-<main class="site-main template-two-columns blog-post-shell">
+<main
+  class="site-main template-two-columns blog-post-shell"
+  style={`--content-width: ${defaultWidth}; --default-width: ${defaultWidth}; --wide-width: ${wideWidth}; --wide-content-width: ${wideWidth};`}
+>
   <article class="article-container">
     {draft && (
       <aside class="draft-banner" role="status">

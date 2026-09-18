@@ -166,9 +166,9 @@ a:hover {
   display: grid;
   grid-template-columns:
     [full-start] minmax(var(--gutter), 1fr)
-    [wide-start] minmax(0, calc((var(--wide-content-width) - var(--default-width)) / 2))
-    [content-start] min(var(--default-width), 100% - (var(--gutter) * 2)) [content-end]
-    minmax(0, calc((var(--wide-content-width) - var(--default-width)) / 2)) [wide-end]
+    [wide-start] minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2)))
+    [content-start] min(100% - (var(--gutter) * 2), var(--default-width)) [content-end]
+    minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2))) [wide-end]
     minmax(var(--gutter), 1fr) [full-end];
   color: var(--text-secondary);
   font-size: 1.125rem;
@@ -182,7 +182,7 @@ a:hover {
 }
 
 .prose > * {
-  grid-column: content;
+  grid-column: content-start / content-end;
   min-width: 0;
 }
 
@@ -217,23 +217,27 @@ a:hover {
 
 /* Inside breakout grid (.prose) */
 .prose > [data-stretch="wide"] {
-  grid-column: wide;
-  max-width: none;
+  grid-column: wide-start / wide-end;
+  width: 100%;
+  max-width: 100%;
 }
 
 .prose > [data-stretch="full"] {
-  grid-column: full;
-  max-width: none;
+  grid-column: full-start / full-end;
+  width: 100%;
+  max-width: 100%;
 }
 
 .prose > [data-stretch="default"] {
-  grid-column: content;
-  max-width: none;
+  grid-column: content-start / content-end;
+  width: 100%;
+  max-width: 100%;
 }
 
 .prose > [data-stretch]:not([data-stretch="wide"]):not([data-stretch="full"]):not([data-stretch="default"]) {
-  grid-column: full;
+  grid-column: full-start / full-end;
   justify-self: center;
+  width: 100%;
   max-width: min(calc(100% - 2 * var(--gutter)), var(--stretch-width, var(--default-width)));
 }
 

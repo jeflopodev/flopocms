@@ -17,6 +17,8 @@ const blog = defineCollection({
 			draft: z.boolean().default(false),
 			author: z.enum(['jeflopo', 'aflopo']).default('jeflopo'),
 			template: z.enum(['default', 'two-column']).default('default'),
+			defaultWidth: z.string().default('60rem'),
+			wideWidth: z.string().default('70rem'),
 		}),
 });
 
