@@ -13,7 +13,6 @@
     "astro": "astro",
     "check:images": "node scripts/check-image-sizes.mjs",
     "deploy": "astro build && wrangler deploy",
-    "new-article": "node scripts/new-article.mjs",
     "seed:users": "node scripts/seed-users.mjs",
     "d1:migrate": "wrangler d1 migrations apply DB",
     "typecheck": "astro sync && tsc --noEmit"
