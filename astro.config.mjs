@@ -5,6 +5,7 @@ import AutoImport from 'astro-auto-import';
 import mdx from '@astrojs/mdx';
 import { satteri } from '@astrojs/markdown-satteri';
 import { satteriSchemaExtractor } from './src/plugins/satteri-schema-extractor.mjs';
+import { blockImports } from './src/blocks/index.ts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -13,13 +14,7 @@ export default defineConfig({
   }),
   integrations: [
     AutoImport({
-      imports: [
-        {
-          './src/components/amazon-product.astro': [['default', 'AmazonProduct']],
-          './src/components/youtube.astro': [['default', 'YouTube']],
-          './src/components/schema.astro': [['default', 'Schema']],
-        },
-      ],
+      imports: blockImports,
     }),
     mdx(),
   ],

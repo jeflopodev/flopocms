@@ -2,7 +2,8 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { getDb } from "../../../../lib/db";
+import { eq } from "drizzle-orm";
+import { getDb, posts } from "../../../../lib/db";
 
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
@@ -17,18 +18,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const post = await db
-      .prepare("SELECT slug FROM posts WHERE id = ?")
-      .bind(id)
-      .first<{ slug: string }>();
+    const [post] = await db
+      .select({ slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.id, id))
+      .limit(1);
 
     const slug = post?.slug?.trim().toLowerCase();
 
-    // 1. Delete associated assets and post record from D1
-    if (slug) {
-      await db.prepare("DELETE FROM assets WHERE post_slug = ?").bind(slug).run();
-    }
-    await db.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();
+    // 1. Delete post record from D1 via Drizzle ORM
+    // (Assets are stored globally and reused across the site, so they are not deleted here)
+    await db.delete(posts).where(eq(posts.id, id));
 
     let deletedFromGitHub = false;
     const githubPat = (env as any)?.GITHUB_PAT || (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);

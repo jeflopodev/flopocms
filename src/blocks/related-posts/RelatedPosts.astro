@@ -1,0 +1,148 @@
+---
+import * as v from "valibot";
+import { eq, and, ne, desc } from "drizzle-orm";
+import { getDb, posts as postsTable, type Post } from "../../lib/db";
+import { relatedPostsSchema, type RelatedPostsProps } from "./schema";
+
+type Props = RelatedPostsProps;
+
+const rawProps = Astro.props;
+const parsed = v.safeParse(relatedPostsSchema, rawProps);
+const { category, limit = 3, currentSlug, title = "Related Articles" } = parsed.success ? parsed.output : rawProps;
+
+const numLimit = Number(limit) || 3;
+let relatedList: Post[] = [];
+
+try {
+  const db = getDb(Astro.locals);
+  if (category) {
+    relatedList = await db
+      .select()
+      .from(postsTable)
+      .where(
+        and(
+          eq(postsTable.status, "published"),
+          eq(postsTable.category, category),
+          currentSlug ? ne(postsTable.slug, currentSlug) : undefined
+        )
+      )
+      .orderBy(desc(postsTable.pubDate))
+      .limit(numLimit);
+  } else {
+    relatedList = await db
+      .select()
+      .from(postsTable)
+      .where(
+        and(
+          eq(postsTable.status, "published"),
+          currentSlug ? ne(postsTable.slug, currentSlug) : undefined
+        )
+      )
+      .orderBy(desc(postsTable.pubDate))
+      .limit(numLimit);
+  }
+} catch {
+  // Silent fallback when D1 binding is not accessible during compile
+}
+---
+
+{relatedList.length > 0 && (
+  <section class="related-posts-block" aria-label={title}>
+    <div class="related-header">
+      <div class="related-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+      </div>
+      <h3 class="related-title">{title}</h3>
+    </div>
+
+    <div class="related-grid">
+      {relatedList.map((item) => (
+        <a href={`/blog/${item.slug}`} class="related-card">
+          <span class="related-category">{item.category || "General"}</span>
+          <h4 class="related-card-title">{item.title}</h4>
+          {item.description && <p class="related-card-desc">{item.description}</p>}
+        </a>
+      ))}
+    </div>
+  </section>
+)}
+
+<style>
+  .related-posts-block {
+    margin: 2.5rem 0;
+    padding: 1.5rem;
+    border-radius: var(--radius-lg, 12px);
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .related-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+    color: var(--primary, #4f46e5);
+  }
+
+  .related-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary, #1e293b);
+  }
+
+  .related-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .related-card {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    border-radius: var(--radius-md, 8px);
+    background: var(--bg-surface-elevated, #f8fafc);
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .related-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary, #4f46e5);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.08);
+  }
+
+  .related-category {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--primary, #4f46e5);
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.05em;
+  }
+
+  .related-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+    margin: 0 0 0.35rem;
+    line-height: 1.35;
+  }
+
+  .related-card-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

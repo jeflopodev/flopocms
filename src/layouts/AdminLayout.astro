@@ -4,9 +4,10 @@ import "../styles/global.css";
 interface Props {
   title?: string;
   activeTab?: "posts" | "assets" | "settings";
+  fullWidth?: boolean;
 }
 
-const { title = "Admin Dashboard", activeTab = "posts" } = Astro.props;
+const { title = "Admin Dashboard", activeTab = "posts", fullWidth = false } = Astro.props;
 const user = Astro.locals.user || { username: "editor" };
 ---
 
@@ -101,7 +102,7 @@ const user = Astro.locals.user || { username: "editor" };
       </aside>
 
       <!-- Main Dashboard View -->
-      <main class="admin-main">
+      <main class:list={["admin-main", { "full-width": fullWidth }]}>
         <slot />
       </main>
     </div>
@@ -294,6 +295,12 @@ const user = Astro.locals.user || { username: "editor" };
     overflow-y: auto;
     padding: 2.5rem;
     max-width: 1200px;
+  }
+
+  .admin-main.full-width {
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   @media (max-width: 768px) {

@@ -1,0 +1,10 @@
+import slugifyLib from "slugify";
+
+export function slugify(text: string): string {
+  if (!text) return "";
+  return slugifyLib(text, {
+    lower: true,
+    strict: true,
+    trim: true,
+  });
+}

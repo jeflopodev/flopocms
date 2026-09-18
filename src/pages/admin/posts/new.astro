@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { getDb } from "../../../lib/db";
+import { getDb, posts } from "../../../lib/db";
 
 const db = getDb(Astro.locals);
 const user = Astro.locals.user || { username: "jeflopo" };
@@ -13,13 +13,22 @@ const title = "Untitled Article";
 const now = new Date().toISOString();
 
 try {
-  await db
-    .prepare(
-      `INSERT INTO posts (id, slug, title, description, category, tags, author, featured_image, content_mdx, status, pub_date, created_at, updated_at)
-       VALUES (?, ?, ?, '', 'General', '[]', ?, '', '', 'draft', ?, ?, ?)`
-    )
-    .bind(id, slug, title, user.username, now, now, now)
-    .run();
+  await db.insert(posts).values({
+    id,
+    slug,
+    title,
+    description: "",
+    category: "General",
+    tags: "[]",
+    author: user.username,
+    featuredImage: "",
+    contentMdx: "",
+    status: "draft",
+    template: "default",
+    pubDate: now,
+    createdAt: now,
+    updatedAt: now,
+  });
 } catch (err) {
   console.error("Failed to create new draft post:", err);
 }

@@ -9,9 +9,16 @@ interface Props {
   description?: string;
   class?: string;
   jsonLd?: Record<string, any>;
+  hasMain?: boolean;
 }
 
-const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className, jsonLd } = Astro.props;
+const {
+  title = SITE_TITLE,
+  description = SITE_DESCRIPTION,
+  class: className,
+  jsonLd,
+  hasMain = true,
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -34,9 +41,13 @@ const { title = SITE_TITLE, description = SITE_DESCRIPTION, class: className, js
   <body>
     <div class="site-shell">
       <Header />
-      <main class:list={["site-main", className]}>
+      {hasMain ? (
+        <main class:list={["site-main", className]}>
+          <slot />
+        </main>
+      ) : (
         <slot />
-      </main>
+      )}
       <Footer />
     </div>
   </body>

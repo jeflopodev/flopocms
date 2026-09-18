@@ -2,7 +2,8 @@
 export const prerender = false;
 
 import AdminLayout from "../../layouts/AdminLayout.astro";
-import { getDb, type UserRow } from "../../lib/db";
+import { eq, sql } from "drizzle-orm";
+import { getDb, users, posts, sessions } from "../../lib/db";
 
 const user = Astro.locals.user;
 if (!user) {
@@ -12,39 +13,42 @@ if (!user) {
 const db = getDb(Astro.locals);
 
 // Fetch user account details
-const userRecord = await db
-  .prepare("SELECT * FROM users WHERE id = ?")
-  .bind(user.id)
-  .first<UserRow>();
+const [userRecord] = await db
+  .select()
+  .from(users)
+  .where(eq(users.id, user.id))
+  .limit(1);
 
 // Fetch stats for this user
-const postStats = await db
-  .prepare(
-    `SELECT 
-       COUNT(*) as total,
-       SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published,
-       SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as drafts
-     FROM posts 
-     WHERE author = ?`
-  )
-  .bind(user.username)
-  .first<{ total: number; published: number; drafts: number }>() || {
+const [postStatsResult] = await db
+  .select({
+    total: sql<number>`COUNT(*)`,
+    published: sql<number>`SUM(CASE WHEN ${posts.status} = 'published' THEN 1 ELSE 0 END)`,
+    drafts: sql<number>`SUM(CASE WHEN ${posts.status} = 'draft' THEN 1 ELSE 0 END)`,
+  })
+  .from(posts)
+  .where(eq(posts.author, user.username));
+
+const postStats = postStatsResult || {
   total: 0,
   published: 0,
   drafts: 0,
 };
 
-const sessionStats = await db
-  .prepare("SELECT COUNT(*) as count FROM sessions WHERE user_id = ?")
-  .bind(user.id)
-  .first<{ count: number }>() || { count: 1 };
+const [sessionStatsResult] = await db
+  .select({ count: sql<number>`COUNT(*)` })
+  .from(sessions)
+  .where(eq(sessions.userId, user.id));
 
-const createdAtFormatted = userRecord?.created_at
+const sessionStats = sessionStatsResult || { count: 1 };
+
+const rawDate = userRecord?.createdAt;
+const createdAtFormatted = rawDate
   ? new Intl.DateTimeFormat("en-US", {
       month: "long",
       day: "numeric",
       year: "numeric",
-    }).format(new Date(userRecord.created_at))
+    }).format(new Date(rawDate))
   : "Active";
 ---
 

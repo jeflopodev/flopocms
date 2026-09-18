@@ -1,7 +1,8 @@
 export const prerender = false;
 
 import type { APIRoute } from "astro";
-import { getDb, type UserRow } from "../../../../lib/db";
+import { eq } from "drizzle-orm";
+import { getDb, users } from "../../../../lib/db";
 import { generateSalt, hashPassword, verifyPassword } from "../../../../lib/auth";
 
 interface ChangePasswordPayload {
@@ -45,10 +46,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const db = getDb(locals);
-    const userRecord = await db
-      .prepare("SELECT * FROM users WHERE id = ?")
-      .bind(user.id)
-      .first<UserRow>();
+    const [userRecord] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
 
     if (!userRecord) {
       return new Response(
@@ -60,7 +62,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const isCurrentValid = await verifyPassword(
       currentPassword,
       userRecord.salt,
-      userRecord.password_hash
+      userRecord.passwordHash
     );
 
     if (!isCurrentValid) {
@@ -75,9 +77,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const newHash = await hashPassword(newPassword, newSalt);
 
     await db
-      .prepare("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?")
-      .bind(newHash, newSalt, user.id)
-      .run();
+      .update(users)
+      .set({ passwordHash: newHash, salt: newSalt })
+      .where(eq(users.id, user.id));
 
     return new Response(
       JSON.stringify({ success: true, message: "Password updated successfully!" }),

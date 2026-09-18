@@ -2,7 +2,8 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { getDb, type PostRow } from "../../../../lib/db";
+import { eq } from "drizzle-orm";
+import { getDb, posts } from "../../../../lib/db";
 
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
@@ -17,10 +18,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const post = await db
-      .prepare("SELECT * FROM posts WHERE id = ?")
-      .bind(id)
-      .first<PostRow>();
+    const [post] = await db
+      .select()
+      .from(posts)
+      .where(eq(posts.id, id))
+      .limit(1);
 
     if (!post) {
       return new Response(JSON.stringify({ success: false, error: "Post not found" }), {
@@ -39,22 +41,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const today = new Date().toISOString().split("T")[0];
-    const pubDate = post.pub_date ? post.pub_date.split("T")[0] : today;
+    const pubDate = post.pubDate ? post.pubDate.split("T")[0] : today;
 
     // Safely escape single quotes and strip newlines in YAML string attributes
     const safeTitle = (post.title || "").replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
     const safeDesc = (post.description || "").replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
-    const heroLine = post.featured_image ? `heroImage: '${post.featured_image.replace(/'/g, "''")}'\n` : "";
+    const heroLine = post.featuredImage ? `heroImage: '${post.featuredImage.replace(/'/g, "''")}'\n` : "";
+    const templateLine = `template: '${post.template || "default"}'\n`;
 
     const mdxContent = `---
 title: '${safeTitle}'
 description: '${safeDesc}'
 pubDate: '${pubDate}'
-${heroLine}author: '${post.author || "jeflopo"}'
+${heroLine}${templateLine}author: '${post.author || "jeflopo"}'
 draft: false
 ---
 
-${post.content_mdx || ""}
+${post.contentMdx || ""}
 `;
 
     const githubPat = (env as any)?.GITHUB_PAT || (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
@@ -104,8 +107,8 @@ ${post.content_mdx || ""}
       if (putRes.ok) {
         committedToGitHub = true;
       } else {
-        const errorText = await putRes.text();
-        console.error("GitHub publish commit failed:", errorText);
+        const putError = await putRes.text();
+        console.error("GitHub publish error:", putError);
       }
     }
 
@@ -116,6 +119,7 @@ ${post.content_mdx || ""}
         const path = await import("node:path");
         const baseDir = path.resolve(process.cwd(), "src", "content", "blog");
         const targetDir = path.resolve(baseDir, slug);
+
         if (targetDir.startsWith(baseDir) && targetDir !== baseDir) {
           if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
@@ -128,12 +132,15 @@ ${post.content_mdx || ""}
       }
     }
 
-    // 3. Mark as published in D1
+    // 3. Mark as published in D1 via Drizzle ORM
     const now = new Date().toISOString();
     await db
-      .prepare("UPDATE posts SET status = 'published', updated_at = ? WHERE id = ?")
-      .bind(now, id)
-      .run();
+      .update(posts)
+      .set({
+        status: "published",
+        updatedAt: now,
+      })
+      .where(eq(posts.id, id));
 
     return new Response(
       JSON.stringify({

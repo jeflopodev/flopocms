@@ -2,17 +2,17 @@
 export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { getDb, type PostRow } from "../../../lib/db";
+import { desc } from "drizzle-orm";
+import { getDb, posts as postsTable, type Post } from "../../../lib/db";
 import { getCollection } from "astro:content";
 
 const db = getDb(Astro.locals);
 
 // Fetch posts from D1
-let posts = (
-  await db
-    .prepare("SELECT * FROM posts ORDER BY updated_at DESC")
-    .all<PostRow>()
-).results || [];
+let posts: Post[] = await db
+  .select()
+  .from(postsTable)
+  .orderBy(desc(postsTable.updatedAt));
 
 // If D1 posts table is empty, auto-seed with existing articles in src/content/blog
 if (posts.length === 0) {
@@ -29,20 +29,24 @@ if (posts.length === 0) {
       const contentMdx = post.body || "";
 
       await db
-        .prepare(
-          `INSERT INTO posts (id, slug, title, description, author, status, pub_date, content_mdx) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(slug) DO NOTHING`
-        )
-        .bind(id, slug, title, description, author, status, pubDate, contentMdx)
-        .run();
+        .insert(postsTable)
+        .values({
+          id,
+          slug,
+          title,
+          description,
+          author,
+          status,
+          pubDate,
+          contentMdx,
+        })
+        .onConflictDoNothing();
     }
 
-    posts = (
-      await db
-        .prepare("SELECT * FROM posts ORDER BY updated_at DESC")
-        .all<PostRow>()
-    ).results || [];
+    posts = await db
+      .select()
+      .from(postsTable)
+      .orderBy(desc(postsTable.updatedAt));
   } catch (err) {
     console.error("Auto-sync existing posts error:", err);
   }
@@ -121,7 +125,7 @@ if (posts.length === 0) {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
-                    }).format(new Date(post.updated_at || post.created_at))}
+                    }).format(new Date(post.updatedAt || post.createdAt || (post as any).updated_at))}
                   </td>
                   <td class="actions-cell">
                     <div class="action-buttons">

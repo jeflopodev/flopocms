@@ -1,7 +1,8 @@
 export const prerender = false;
 
 import type { APIRoute } from "astro";
-import { getDb, type PostRow } from "../../../../lib/db";
+import { eq } from "drizzle-orm";
+import { getDb, posts } from "../../../../lib/db";
 
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
@@ -16,10 +17,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const original = await db
-      .prepare("SELECT * FROM posts WHERE id = ?")
-      .bind(id)
-      .first<PostRow>();
+    const [original] = await db
+      .select()
+      .from(posts)
+      .where(eq(posts.id, id))
+      .limit(1);
 
     if (!original) {
       return new Response(JSON.stringify({ success: false, error: "Post not found" }), {
@@ -34,26 +36,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const newTitle = `${original.title} (Copy)`;
     const now = new Date().toISOString();
 
-    await db
-      .prepare(
-        `INSERT INTO posts (id, slug, title, description, category, tags, author, featured_image, content_mdx, status, pub_date, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
-      )
-      .bind(
-        newId,
-        newSlug,
-        newTitle,
-        original.description,
-        original.category,
-        original.tags,
-        original.author,
-        original.featured_image,
-        original.content_mdx,
-        now,
-        now,
-        now
-      )
-      .run();
+    await db.insert(posts).values({
+      id: newId,
+      slug: newSlug,
+      title: newTitle,
+      description: original.description,
+      category: original.category,
+      tags: original.tags,
+      author: original.author,
+      featuredImage: original.featuredImage,
+      contentMdx: original.contentMdx,
+      status: "draft",
+      template: original.template,
+      pubDate: now,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     return new Response(JSON.stringify({ success: true, newId }), {
       status: 200,

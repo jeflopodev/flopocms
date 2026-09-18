@@ -1,7 +1,8 @@
 export const prerender = false;
 
 import type { APIRoute } from "astro";
-import { getDb, type PostRow } from "../../../../lib/db";
+import { eq, and, ne } from "drizzle-orm";
+import { getDb, posts } from "../../../../lib/db";
 
 interface SavePostPayload {
   id?: string;
@@ -14,6 +15,7 @@ interface SavePostPayload {
   featured_image?: string;
   content_mdx?: string;
   status?: "draft" | "published";
+  template?: "default" | "two-column";
   pub_date?: string;
 }
 
@@ -33,6 +35,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       featured_image = "",
       content_mdx = "",
       status = "draft",
+      template = "default",
       pub_date,
     } = body;
 
@@ -57,17 +60,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const effectivePubDate = pub_date || now;
 
     // Check if post exists
-    const existing = await db
-      .prepare("SELECT id FROM posts WHERE id = ?")
-      .bind(id)
-      .first<PostRow>();
+    const [existing] = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(eq(posts.id, id))
+      .limit(1);
 
     if (existing) {
       // Check slug uniqueness across OTHER posts
-      const slugConflict = await db
-        .prepare("SELECT id FROM posts WHERE slug = ? AND id != ?")
-        .bind(cleanSlug, id)
-        .first<PostRow>();
+      const [slugConflict] = await db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(eq(posts.slug, cleanSlug), ne(posts.id, id)))
+        .limit(1);
 
       if (slugConflict) {
         return new Response(
@@ -77,58 +82,39 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       await db
-        .prepare(
-          `UPDATE posts SET
-            slug = ?,
-            title = ?,
-            description = ?,
-            category = ?,
-            tags = ?,
-            author = ?,
-            featured_image = ?,
-            content_mdx = ?,
-            status = ?,
-            pub_date = ?,
-            updated_at = ?
-           WHERE id = ?`
-        )
-        .bind(
-          cleanSlug,
+        .update(posts)
+        .set({
+          slug: cleanSlug,
           title,
           description,
           category,
-          tagsStr,
+          tags: tagsStr,
           author,
-          featured_image,
-          content_mdx,
+          featuredImage: featured_image,
+          contentMdx: content_mdx,
           status,
-          effectivePubDate,
-          now,
-          id
-        )
-        .run();
+          template,
+          pubDate: effectivePubDate,
+          updatedAt: now,
+        })
+        .where(eq(posts.id, id));
     } else {
-      await db
-        .prepare(
-          `INSERT INTO posts (id, slug, title, description, category, tags, author, featured_image, content_mdx, status, pub_date, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .bind(
-          id,
-          cleanSlug,
-          title,
-          description,
-          category,
-          tagsStr,
-          author,
-          featured_image,
-          content_mdx,
-          status,
-          effectivePubDate,
-          now,
-          now
-        )
-        .run();
+      await db.insert(posts).values({
+        id,
+        slug: cleanSlug,
+        title,
+        description,
+        category,
+        tags: tagsStr,
+        author,
+        featuredImage: featured_image,
+        contentMdx: content_mdx,
+        status,
+        template,
+        pubDate: effectivePubDate,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     return new Response(

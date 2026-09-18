@@ -1,4 +1,5 @@
 /// <reference path="../.astro/types.d.ts" />
+/// <reference types="astro/client" />
 /// <reference path="../worker-configuration.d.ts" />
 
 interface Env {
@@ -18,4 +19,9 @@ declare namespace App {
     };
     cfContext?: any;
   }
+}
+
+declare module "*.astro" {
+  const component: any;
+  export default component;
 }

@@ -1,0 +1,41 @@
+---
+import * as v from "valibot";
+import { ulSchema, normalizeListStyleType, type UlProps } from "./schema";
+
+type Props = UlProps;
+
+const rawProps = Astro.props;
+const parsed = v.safeParse(ulSchema, rawProps);
+const data = parsed.success ? parsed.output : rawProps;
+
+const rawType = (data as any)["list-style-type"] || data.listStyleType || "disc";
+const computedType = normalizeListStyleType(rawType);
+const customClass = data.class || "";
+const customStyle = data.style || "";
+---
+
+<ul
+  class:list={["complex-list-ul", customClass]}
+  style={`list-style-type: ${computedType} !important; ${customStyle}`}
+>
+  <slot />
+</ul>
+
+<style>
+  .complex-list-ul {
+    margin: 1.25rem 0;
+    padding-left: 1.75rem;
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+
+  .complex-list-ul :global(li) {
+    margin-bottom: 0.35rem;
+  }
+
+  .complex-list-ul :global(ul),
+  .complex-list-ul :global(ol) {
+    margin: 0.5rem 0 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+</style>

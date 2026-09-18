@@ -2,47 +2,51 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { getDb } from "../../../../lib/db";
+import { getDb, assets } from "../../../../lib/db";
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB limit
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB for images
+const MAX_NON_IMAGE_SIZE = 25 * 1024 * 1024; // 25 MB for media, video, archives, documents
 
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const slug = (formData.get("slug") as string)?.trim().toLowerCase();
 
-    if (!file || !slug) {
+    if (!file) {
       return new Response(
-        JSON.stringify({ success: false, error: "File and post slug are required" }),
+        JSON.stringify({ success: false, error: "No file uploaded" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-    if (!SLUG_REGEX.test(slug)) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Invalid post slug format. Must be alphanumeric with hyphens." }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    const isImage = file.type.startsWith("image/");
+    const maxAllowedSize = isImage ? MAX_IMAGE_SIZE : MAX_NON_IMAGE_SIZE;
+    const maxAllowedLabel = isImage ? "2 MB" : "25 MB";
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > maxAllowedSize) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: `File size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds 2 MB limit.`,
+          error: `File size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the ${maxAllowedLabel} limit.`,
         }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
     // Clean filename
-    const originalName = file.name || "image.png";
-    const cleanFilename = originalName
+    const originalName = file.name || "upload.bin";
+    const extension = originalName.includes(".")
+      ? "." + originalName.split(".").pop()?.toLowerCase()
+      : "";
+    const baseName = originalName
+      .replace(/\.[^/.]+$/, "")
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, "-")
-      .replace(/-+/g, "-");
+      .replace(/-+/g, "-")
+      .slice(0, 80);
+
+    const cleanFilename = `${baseName}${extension}`;
+    const url = `/uploads/${cleanFilename}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -50,15 +54,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const githubPat = (env as any)?.GITHUB_PAT || (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
 
-    let githubUrl = "";
-
-    // 1. Commit to GitHub if GITHUB_PAT configured
+    // 1. Commit to GitHub if GITHUB_PAT configured (production Workers)
     if (githubPat) {
-      const targetPath = `src/content/blog/${slug}/${cleanFilename}`;
+      const targetPath = `public/uploads/${cleanFilename}`;
       const repo = "jeflopodev/blog-astro";
       const branch = "main";
 
-      // Check if file already exists on GitHub to get SHA for update
       let sha: string | undefined;
       try {
         const checkRes = await fetch(`https://api.github.com/repos/${repo}/contents/${targetPath}?ref=${branch}`, {
@@ -69,14 +70,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
           },
         });
         if (checkRes.ok) {
-          const checkData = await checkRes.json() as any;
+          const checkData = (await checkRes.json()) as any;
           sha = checkData.sha;
         }
       } catch (err) {
         console.warn("GitHub check file warning:", err);
       }
 
-      // Put content to GitHub
       const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${targetPath}`, {
         method: "PUT",
         headers: {
@@ -86,7 +86,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: `media(blog): add ${cleanFilename} to ${slug} [skip ci]`,
+          message: `media(global): upload ${cleanFilename} [skip ci]`,
           content: base64Content,
           branch,
           ...(sha ? { sha } : {}),
@@ -95,9 +95,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
       if (!putRes.ok) {
         const putError = await putRes.text();
-        console.error("GitHub upload error:", putError);
-      } else {
-        githubUrl = `https://raw.githubusercontent.com/${repo}/${branch}/${targetPath}`;
+        console.error("GitHub global upload error:", putError);
       }
     }
 
@@ -106,40 +104,52 @@ export const POST: APIRoute = async ({ request, locals }) => {
       try {
         const fs = await import("node:fs");
         const path = await import("node:path");
-        const baseDir = path.resolve(process.cwd(), "src", "content", "blog");
-        const targetDir = path.resolve(baseDir, slug);
-        if (targetDir.startsWith(baseDir) && targetDir !== baseDir) {
-          if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true });
-          }
-          const filePath = path.join(targetDir, cleanFilename);
-          fs.writeFileSync(filePath, buffer);
+        const uploadsDir = path.resolve(process.cwd(), "public", "uploads");
+
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
         }
+
+        const filePath = path.join(uploadsDir, cleanFilename);
+        fs.writeFileSync(filePath, buffer);
       } catch (localErr) {
         console.warn("Local filesystem write error:", localErr);
       }
     }
 
-    // 3. Register in D1 assets table
+    // 3. Register in D1 global assets table via Drizzle ORM
     const db = getDb(locals);
     const assetId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const fallbackTitle = baseName.replace(/-/g, " ");
 
-    await db
-      .prepare(
-        `INSERT INTO assets (id, post_slug, filename, mime_type, byte_size, github_url, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(assetId, slug, cleanFilename, file.type, file.size, githubUrl, now)
-      .run();
+    await db.insert(assets).values({
+      id: assetId,
+      filename: cleanFilename,
+      originalName,
+      mimeType: file.type || "application/octet-stream",
+      byteSize: file.size,
+      url,
+      title: fallbackTitle,
+      altText: fallbackTitle,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const snippet = isImage
+      ? `![${fallbackTitle}](${url})`
+      : `<a href="${url}" download="${originalName}">${originalName}</a>`;
 
     return new Response(
       JSON.stringify({
         success: true,
         assetId,
         filename: cleanFilename,
-        githubUrl,
-        snippet: `![${cleanFilename}](./${cleanFilename})`,
+        url,
+        mimeType: file.type,
+        byteSize: file.size,
+        snippet,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );

@@ -2,41 +2,33 @@
 export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { getDb, type AssetRow } from "../../../lib/db";
+import { desc } from "drizzle-orm";
+import { getDb, assets as assetsTable, type Asset } from "../../../lib/db";
 
 const db = getDb(Astro.locals);
 
-let assets: AssetRow[] = [];
+let assets: Asset[] = [];
 try {
-  assets = (
-    await db
-      .prepare("SELECT * FROM assets ORDER BY created_at DESC")
-      .all<AssetRow>()
-  ).results || [];
+  assets = await db.select().from(assetsTable).orderBy(desc(assetsTable.createdAt));
 } catch (err) {
   console.error("Fetch assets error:", err);
 }
 
-const totalBytes = assets.reduce((sum, a) => sum + (a.byte_size || 0), 0);
+const totalBytes = assets.reduce((sum, a) => sum + (a.byteSize || 0), 0);
 const formattedTotalSize =
   totalBytes > 1024 * 1024
     ? `${(totalBytes / (1024 * 1024)).toFixed(2)} MB`
     : `${(totalBytes / 1024).toFixed(1)} KB`;
-
-function formatSize(bytes: number) {
-  if (!bytes) return "0 KB";
-  if (bytes > 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(bytes / 1024).toFixed(1)} KB`;
-}
 ---
 
-<AdminLayout title="Asset Registry" activeTab="assets">
-  <div class="assets-page">
-    <div class="page-header">
+<AdminLayout title="Asset Registry" activeTab="assets" fullWidth={true}>
+  <div class="assets-viewport-page">
+    <!-- Header -->
+    <header class="page-header">
       <div>
         <h1 class="page-title">Asset Registry</h1>
         <p class="page-subtitle">
-          Media co-located in Git and tracked in D1. Images are optimized at build time via Astro Sharp.
+          Centralized media storage across the site. Upload once, reuse across any article and block component.
         </p>
       </div>
 
@@ -50,145 +42,640 @@ function formatSize(bytes: number) {
           <span class="stat-label">Total Weight</span>
         </div>
       </div>
-    </div>
+    </header>
 
-    <!-- Assets Container -->
-    {assets.length === 0 ? (
-      <div class="empty-state-card">
-        <div class="empty-icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
-          </svg>
-        </div>
-        <h3>No co-located assets yet</h3>
-        <p>
-          Upload images directly while drafting in the <strong>Article Editor</strong>. Uploaded media is committed to Git inside <code>src/content/blog/&lt;slug&gt;/</code> and registered here for easy reference.
-        </p>
-        <a href="/admin/posts" class="btn btn-primary">Go to Articles</a>
-      </div>
-    ) : (
-      <div class="assets-grid">
-        {assets.map((asset) => (
-          <div class="asset-card">
-            <div class="asset-preview">
-              {asset.mime_type.startsWith("image/") ? (
-                <img
-                  src={asset.github_url || `https://raw.githubusercontent.com/jeflopodev/blog-astro/main/src/content/blog/${asset.post_slug}/${asset.filename}`}
-                  alt={asset.filename}
-                  loading="lazy"
-                  onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'1\'><rect x=\'3\' y=\'3\' width=\'18\' height=\'18\' rx=\'2\'/><circle cx=\'8.5\' cy=\'8.5\' r=\'1.5\'/><polyline points=\'21 15 16 10 5 21\'/></svg>'"
-                />
-              ) : (
-                <div class="file-icon-placeholder">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                </div>
-              )}
-            </div>
-
-            <div class="asset-info">
-              <div class="asset-name" title={asset.filename}>
-                {asset.filename}
-              </div>
-
-              <div class="asset-meta">
-                <span class="meta-badge slug">/{asset.post_slug}</span>
-                <span class="meta-size">{formatSize(asset.byte_size)}</span>
-              </div>
-
-              <div class="asset-actions">
-                <button
-                  type="button"
-                  class="btn-action copy-markdown-btn"
-                  data-snippet={`![${asset.filename}](./${asset.filename})`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
-                  Copy Snippet
-                </button>
-
-                {asset.github_url && (
-                  <a
-                    href={asset.github_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="btn-action view-link"
-                    title="View on GitHub"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                      <polyline points="15 3 21 3 21 9"/>
-                      <line x1="10" y1="14" x2="21" y2="3"/>
-                    </svg>
-                  </a>
-                )}
-              </div>
-            </div>
+    <!-- Dashed Upload Dropzone -->
+    <section class="upload-dropzone-section">
+      <div id="dropzone" class="upload-dropzone">
+        <input
+          type="file"
+          id="global-file-input"
+          class="file-input-hidden"
+          accept="image/*,video/*,application/pdf,application/zip,audio/*"
+          multiple
+        />
+        <div class="dropzone-content">
+          <div class="dropzone-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
           </div>
-        ))}
+          <div class="dropzone-text">
+            <h3>Drag and drop files here, or <button type="button" id="browse-btn" class="browse-link-btn">browse files</button></h3>
+            <p class="dropzone-limits">
+              Supports <strong>Images</strong> (up to 2 MiB), <strong>Videos</strong>, <strong>PDFs</strong>, and <strong>ZIP archives</strong> (up to 25 MiB).
+            </p>
+          </div>
+        </div>
+        <div id="upload-progress-container" class="upload-progress-container hidden">
+          <div class="progress-bar-track">
+            <div id="upload-progress-bar" class="progress-bar-fill"></div>
+          </div>
+          <span id="upload-progress-text" class="progress-text">Uploading...</span>
+        </div>
       </div>
-    )}
+    </section>
+
+    <!-- Filter & Search Controls -->
+    <section class="controls-bar">
+      <div class="search-input-wrapper">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          type="text"
+          id="asset-search-input"
+          class="filter-input"
+          placeholder="Search by filename, title, or alt text..."
+        />
+        <button type="button" id="clear-search-btn" class="clear-btn hidden" title="Clear search">&times;</button>
+      </div>
+
+      <div class="filters-group">
+        <div class="type-pills" role="radiogroup" aria-label="Filter by media type">
+          <button type="button" class="type-pill active" data-type="all">All</button>
+          <button type="button" class="type-pill" data-type="image">Images</button>
+          <button type="button" class="type-pill" data-type="video">Videos</button>
+          <button type="button" class="type-pill" data-type="document">Docs / ZIP</button>
+        </div>
+
+        <div class="sort-select-wrapper">
+          <select id="asset-sort-select" class="sort-select">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="largest">Largest Size</option>
+            <option value="smallest">Smallest Size</option>
+            <option value="alpha">Alphabetical</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Asset Cards Grid -->
+    <main id="assets-grid" class="assets-grid">
+      {assets.length === 0 ? (
+        <div class="empty-state-card" id="empty-state">
+          <div class="empty-icon">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+          <h3>No assets in the registry</h3>
+          <p>Drag and drop your images, videos, or documents into the upload box above to get started.</p>
+        </div>
+      ) : null}
+    </main>
+
+    <!-- Initial Data Serialized for Client-Side Filtering & Modal -->
+    <script id="assets-data" type="application/json" set:html={JSON.stringify(assets)} />
   </div>
 
-  <script>
-    document.querySelectorAll(".copy-markdown-btn").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        const target = e.currentTarget as HTMLElement;
-        const snippet = target.dataset.snippet || "";
-        try {
-          await navigator.clipboard.writeText(snippet);
-          const originalText = target.innerHTML;
-          target.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            Copied!
-          `;
-          setTimeout(() => {
-            target.innerHTML = originalText;
-          }, 1800);
-        } catch {
-          alert("Failed to copy snippet");
-        }
-      });
-    });
-  </script>
+  <!-- Asset Preview & Metadata Modal -->
+  <dialog id="asset-modal" class="asset-modal">
+    <div class="modal-shell">
+      <div class="modal-header">
+        <h2 id="modal-filename" class="modal-title">Asset Details</h2>
+        <button type="button" id="modal-close-btn" class="modal-close-btn" title="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Preview Column -->
+        <div class="preview-column">
+          <div id="modal-preview-target" class="preview-target"></div>
+          <div class="preview-actions">
+            <button type="button" id="copy-url-btn" class="btn btn-secondary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              Copy URL
+            </button>
+            <button type="button" id="copy-snippet-btn" class="btn btn-secondary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+              Copy Markdown
+            </button>
+          </div>
+        </div>
+
+        <!-- Metadata Form Column -->
+        <div class="metadata-column">
+          <form id="metadata-form">
+            <input type="hidden" id="edit-asset-id" />
+
+            <div class="form-group">
+              <label for="edit-title">Title / Name</label>
+              <input type="text" id="edit-title" class="form-control" placeholder="Friendly title for this asset..." />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-alt">Alt Text (For accessibility & SEO)</label>
+              <input type="text" id="edit-alt" class="form-control" placeholder="Descriptive alternative text..." />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-desc">Description (Optional notes or captions)</label>
+              <textarea id="edit-desc" class="form-control" rows="3" placeholder="Context or internal notes..."></textarea>
+            </div>
+
+            <div class="asset-meta-table">
+              <div class="meta-row">
+                <span class="meta-key">Relative URL:</span>
+                <code id="meta-url" class="meta-val"></code>
+              </div>
+              <div class="meta-row">
+                <span class="meta-key">MIME Type:</span>
+                <span id="meta-mime" class="meta-val"></span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-key">File Size:</span>
+                <span id="meta-size" class="meta-val"></span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-key">Uploaded:</span>
+                <span id="meta-date" class="meta-val"></span>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="save-metadata-btn" class="btn btn-primary">
+                Save Changes
+              </button>
+              <button type="button" id="delete-asset-btn" class="btn btn-danger">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                Delete
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </dialog>
 </AdminLayout>
 
+<script>
+  interface AssetData {
+    id: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    byteSize: number;
+    url: string;
+    title: string;
+    altText: string;
+    description: string;
+    createdAt: string;
+    updatedAt: string;
+  }
+
+  // Load initial serialized data
+  const dataScript = document.getElementById("assets-data");
+  let allAssets: AssetData[] = JSON.parse(dataScript?.textContent || "[]");
+
+  // DOM Elements
+  const grid = document.getElementById("assets-grid") as HTMLElement;
+  const searchInput = document.getElementById("asset-search-input") as HTMLInputElement;
+  const clearSearchBtn = document.getElementById("clear-search-btn") as HTMLButtonElement;
+  const sortSelect = document.getElementById("asset-sort-select") as HTMLSelectElement;
+  const typePills = document.querySelectorAll(".type-pill");
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("global-file-input") as HTMLInputElement;
+  const browseBtn = document.getElementById("browse-btn");
+  const progressContainer = document.getElementById("upload-progress-container");
+  const progressBar = document.getElementById("upload-progress-bar");
+  const progressText = document.getElementById("upload-progress-text");
+
+  // Modal Elements
+  const modal = document.getElementById("asset-modal") as HTMLDialogElement;
+  const modalCloseBtn = document.getElementById("modal-close-btn");
+  const modalFilename = document.getElementById("modal-filename");
+  const modalPreviewTarget = document.getElementById("modal-preview-target");
+  const editAssetId = document.getElementById("edit-asset-id") as HTMLInputElement;
+  const editTitle = document.getElementById("edit-title") as HTMLInputElement;
+  const editAlt = document.getElementById("edit-alt") as HTMLInputElement;
+  const editDesc = document.getElementById("edit-desc") as HTMLTextAreaElement;
+  const metaUrl = document.getElementById("meta-url");
+  const metaMime = document.getElementById("meta-mime");
+  const metaSize = document.getElementById("meta-size");
+  const metaDate = document.getElementById("meta-date");
+  const copyUrlBtn = document.getElementById("copy-url-btn");
+  const copySnippetBtn = document.getElementById("copy-snippet-btn");
+  const metadataForm = document.getElementById("metadata-form");
+  const deleteAssetBtn = document.getElementById("delete-asset-btn");
+
+  let activeTypeFilter = "all";
+  let activeSearchQuery = "";
+  let activeSort = "newest";
+  let currentSelectedAsset: AssetData | null = null;
+
+  function formatBytes(bytes: number) {
+    if (!bytes) return "0 KB";
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  function renderGrid() {
+    if (!grid) return;
+
+    // Filter
+    let filtered = allAssets.filter((a) => {
+      // Type filter
+      if (activeTypeFilter === "image" && !a.mimeType.startsWith("image/")) return false;
+      if (activeTypeFilter === "video" && !a.mimeType.startsWith("video/")) return false;
+      if (
+        activeTypeFilter === "document" &&
+        (a.mimeType.startsWith("image/") || a.mimeType.startsWith("video/"))
+      ) {
+        return false;
+      }
+
+      // Search filter
+      if (activeSearchQuery) {
+        const q = activeSearchQuery.toLowerCase();
+        const matchesName = a.filename.toLowerCase().includes(q);
+        const matchesTitle = (a.title || "").toLowerCase().includes(q);
+        const matchesAlt = (a.altText || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesTitle && !matchesAlt) return false;
+      }
+
+      return true;
+    });
+
+    // Sort
+    filtered.sort((a, b) => {
+      if (activeSort === "newest") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (activeSort === "oldest") {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (activeSort === "largest") {
+        return b.byteSize - a.byteSize;
+      }
+      if (activeSort === "smallest") {
+        return a.byteSize - b.byteSize;
+      }
+      if (activeSort === "alpha") {
+        return a.filename.localeCompare(b.filename);
+      }
+      return 0;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="empty-filtered-card">
+          <p>No assets match the selected filter criteria.</p>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = "";
+
+    for (const asset of filtered) {
+      const card = document.createElement("div");
+      card.className = "asset-card";
+      card.dataset.id = asset.id;
+
+      const isImg = asset.mimeType.startsWith("image/");
+      const isVid = asset.mimeType.startsWith("video/");
+
+      let previewHtml = "";
+      if (isImg) {
+        previewHtml = `<img src="${asset.url}" alt="${asset.altText || asset.filename}" loading="lazy" class="card-thumb-img" />`;
+      } else if (isVid) {
+        previewHtml = `
+          <div class="card-icon-preview video">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span class="preview-type-badge">VIDEO</span>
+          </div>
+        `;
+      } else {
+        previewHtml = `
+          <div class="card-icon-preview document">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span class="preview-type-badge">DOC</span>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="card-thumb">${previewHtml}</div>
+        <div class="card-details">
+          <div class="card-filename" title="${asset.filename}">${asset.filename}</div>
+          <div class="card-meta">
+            <span class="size-pill">${formatBytes(asset.byteSize)}</span>
+            <span class="date-pill">${new Date(asset.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+      `;
+
+      card.addEventListener("click", () => openAssetModal(asset));
+      grid.appendChild(card);
+    }
+  }
+
+  function openAssetModal(asset: AssetData) {
+    currentSelectedAsset = asset;
+    if (modalFilename) modalFilename.textContent = asset.filename;
+    if (editAssetId) editAssetId.value = asset.id;
+    if (editTitle) editTitle.value = asset.title || "";
+    if (editAlt) editAlt.value = asset.altText || "";
+    if (editDesc) editDesc.value = asset.description || "";
+    if (metaUrl) metaUrl.textContent = asset.url;
+    if (metaMime) metaMime.textContent = asset.mimeType;
+    if (metaSize) metaSize.textContent = formatBytes(asset.byteSize);
+    if (metaDate) metaDate.textContent = new Date(asset.createdAt).toLocaleString();
+
+    if (modalPreviewTarget) {
+      if (asset.mimeType.startsWith("image/")) {
+        modalPreviewTarget.innerHTML = `<img src="${asset.url}" alt="${asset.altText || asset.filename}" class="modal-hero-img" />`;
+      } else if (asset.mimeType.startsWith("video/")) {
+        modalPreviewTarget.innerHTML = `
+          <video src="${asset.url}" controls class="modal-hero-video"></video>
+        `;
+      } else {
+        modalPreviewTarget.innerHTML = `
+          <div class="modal-doc-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <a href="${asset.url}" target="_blank" download="${asset.filename}" class="btn btn-secondary">Download File</a>
+          </div>
+        `;
+      }
+    }
+
+    modal.showModal();
+  }
+
+  modalCloseBtn?.addEventListener("click", () => {
+    modal.close();
+  });
+
+  modal?.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.close();
+    }
+  });
+
+  // Copy buttons
+  copyUrlBtn?.addEventListener("click", async () => {
+    if (!currentSelectedAsset) return;
+    await navigator.clipboard.writeText(currentSelectedAsset.url);
+    const orig = copyUrlBtn.innerHTML;
+    copyUrlBtn.innerHTML = `<span>Copied!</span>`;
+    setTimeout(() => (copyUrlBtn.innerHTML = orig), 2000);
+  });
+
+  copySnippetBtn?.addEventListener("click", async () => {
+    if (!currentSelectedAsset) return;
+    const snippet = currentSelectedAsset.mimeType.startsWith("image/")
+      ? `![${currentSelectedAsset.altText || currentSelectedAsset.filename}](${currentSelectedAsset.url})`
+      : `<a href="${currentSelectedAsset.url}" download="${currentSelectedAsset.filename}">${currentSelectedAsset.title || currentSelectedAsset.filename}</a>`;
+    await navigator.clipboard.writeText(snippet);
+    const orig = copySnippetBtn.innerHTML;
+    copySnippetBtn.innerHTML = `<span>Copied!</span>`;
+    setTimeout(() => (copySnippetBtn.innerHTML = orig), 2000);
+  });
+
+  // Save Metadata
+  metadataForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!currentSelectedAsset) return;
+
+    const saveBtn = document.getElementById("save-metadata-btn");
+    if (saveBtn) saveBtn.textContent = "Saving...";
+
+    try {
+      const res = await fetch("/api/admin/assets/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: currentSelectedAsset.id,
+          title: editTitle.value.trim(),
+          altText: editAlt.value.trim(),
+          description: editDesc.value.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        currentSelectedAsset.title = editTitle.value.trim();
+        currentSelectedAsset.altText = editAlt.value.trim();
+        currentSelectedAsset.description = editDesc.value.trim();
+        renderGrid();
+        if (saveBtn) saveBtn.textContent = "Saved!";
+        setTimeout(() => {
+          if (saveBtn) saveBtn.textContent = "Save Changes";
+        }, 1800);
+      } else {
+        alert(data.error || "Failed to update asset metadata");
+        if (saveBtn) saveBtn.textContent = "Save Changes";
+      }
+    } catch {
+      alert("Error contacting server");
+      if (saveBtn) saveBtn.textContent = "Save Changes";
+    }
+  });
+
+  // Delete Asset
+  deleteAssetBtn?.addEventListener("click", async () => {
+    if (!currentSelectedAsset) return;
+    const confirmDelete = confirm(`Are you sure you want to permanently delete "${currentSelectedAsset.filename}"?`);
+    if (!confirmDelete) return;
+
+    deleteAssetBtn.textContent = "Deleting...";
+
+    try {
+      const res = await fetch("/api/admin/assets/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentSelectedAsset.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        allAssets = allAssets.filter((a) => a.id !== currentSelectedAsset?.id);
+        modal.close();
+        renderGrid();
+      } else {
+        alert(data.error || "Failed to delete asset");
+        deleteAssetBtn.textContent = "Delete";
+      }
+    } catch {
+      alert("Error contacting server");
+      deleteAssetBtn.textContent = "Delete";
+    }
+  });
+
+  // Filters & Search
+  searchInput?.addEventListener("input", () => {
+    activeSearchQuery = searchInput.value.trim();
+    if (activeSearchQuery) {
+      clearSearchBtn.classList.remove("hidden");
+    } else {
+      clearSearchBtn.classList.add("hidden");
+    }
+    renderGrid();
+  });
+
+  clearSearchBtn?.addEventListener("click", () => {
+    searchInput.value = "";
+    activeSearchQuery = "";
+    clearSearchBtn.classList.add("hidden");
+    renderGrid();
+  });
+
+  sortSelect?.addEventListener("change", () => {
+    activeSort = sortSelect.value;
+    renderGrid();
+  });
+
+  typePills.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      typePills.forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      activeTypeFilter = (btn as HTMLElement).dataset.type || "all";
+      renderGrid();
+    });
+  });
+
+  // Upload Logic (Drag and Drop & Browse)
+  browseBtn?.addEventListener("click", () => fileInput?.click());
+
+  dropzone?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+
+  dropzone?.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+
+  dropzone?.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    if (e.dataTransfer?.files) {
+      await handleFilesUpload(e.dataTransfer.files);
+    }
+  });
+
+  fileInput?.addEventListener("change", async () => {
+    if (fileInput.files) {
+      await handleFilesUpload(fileInput.files);
+      fileInput.value = "";
+    }
+  });
+
+  async function handleFilesUpload(fileList: FileList) {
+    if (!fileList || fileList.length === 0) return;
+
+    progressContainer?.classList.remove("hidden");
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const isImg = file.type.startsWith("image/");
+      const maxSize = isImg ? 2 * 1024 * 1024 : 25 * 1024 * 1024;
+      const maxLabel = isImg ? "2 MiB" : "25 MiB";
+
+      if (file.size > maxSize) {
+        alert(`File "${file.name}" exceeds the ${maxLabel} size limit.`);
+        continue;
+      }
+
+      if (progressText) {
+        progressText.textContent = `Uploading ${file.name} (${i + 1}/${fileList.length})...`;
+      }
+      if (progressBar) {
+        progressBar.style.width = `${Math.round(((i + 0.5) / fileList.length) * 100)}%`;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/api/admin/assets/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success) {
+          allAssets.unshift({
+            id: data.assetId,
+            filename: data.filename,
+            originalName: file.name,
+            mimeType: data.mimeType || file.type,
+            byteSize: data.byteSize || file.size,
+            url: data.url,
+            title: data.filename,
+            altText: data.filename,
+            description: "",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          alert(`Error uploading ${file.name}: ${data.error}`);
+        }
+      } catch {
+        alert(`Failed to upload ${file.name}`);
+      }
+    }
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (progressText) progressText.textContent = "Upload complete!";
+    setTimeout(() => {
+      progressContainer?.classList.add("hidden");
+      if (progressBar) progressBar.style.width = "0%";
+    }, 1200);
+
+    renderGrid();
+  }
+
+  // Initial render
+  renderGrid();
+</script>
+
 <style>
-  .assets-page {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
+  .assets-viewport-page {
+    width: 100%;
+    margin: 0 auto;
   }
 
   .page-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    margin-bottom: 2rem;
     gap: 1.5rem;
-    flex-wrap: wrap;
   }
 
   .page-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    margin: 0 0 0.25rem 0;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
     color: var(--text-primary);
+    margin: 0 0 0.4rem;
   }
 
   .page-subtitle {
-    margin: 0;
     color: var(--text-muted);
     font-size: 0.95rem;
-    max-width: 620px;
+    margin: 0;
   }
 
   .header-stats {
@@ -199,108 +686,248 @@ function formatSize(bytes: number) {
   .stat-pill {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    padding: 0.625rem 1rem;
-    border-radius: 12px;
+    padding: 0.6rem 1.1rem;
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
 
   .stat-num {
-    font-size: 1.15rem;
+    font-size: 1.25rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--primary);
   }
 
   .stat-label {
-    font-size: 0.725rem;
-    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-muted);
   }
 
-  /* Empty state */
-  .empty-state-card {
-    background: var(--bg-surface);
-    border: 1px dashed var(--border-subtle);
-    border-radius: 16px;
-    padding: 4rem 2rem;
+  /* Dashed Upload Dropzone */
+  .upload-dropzone-section {
+    margin-bottom: 2rem;
+  }
+
+  .upload-dropzone {
+    border: 2px dashed rgba(99, 102, 241, 0.35);
+    background: rgba(99, 102, 241, 0.03);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 1.5rem;
     text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    max-width: 580px;
-    margin: 2rem auto;
+    transition: all var(--transition-fast);
+    cursor: pointer;
   }
 
-  .empty-icon {
-    width: 68px;
-    height: 68px;
-    border-radius: 20px;
-    background: var(--bg-subtle, rgba(255, 255, 255, 0.05));
-    color: var(--text-muted);
-    display: flex;
+  .upload-dropzone:hover,
+  .upload-dropzone.dragover {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .file-input-hidden {
+    display: none;
+  }
+
+  .dropzone-icon {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1.25rem;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--primary);
+    margin-bottom: 1rem;
   }
 
-  .empty-state-card h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.25rem;
+  .dropzone-text h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
     color: var(--text-primary);
   }
 
-  .empty-state-card p {
-    margin: 0 0 1.5rem 0;
-    color: var(--text-muted);
-    font-size: 0.95rem;
-    line-height: 1.5;
-  }
-
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
+  .browse-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--primary-light);
+    text-decoration: underline;
+    font-size: inherit;
     font-weight: 600;
-    padding: 0.625rem 1.25rem;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: opacity 0.15s ease;
+    cursor: pointer;
   }
 
-  .btn-primary:hover {
-    opacity: 0.9;
+  .dropzone-limits {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .upload-progress-container {
+    margin-top: 1.5rem;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .progress-bar-track {
+    width: 100%;
+    height: 8px;
+    background: var(--border-subtle);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--primary);
+    transition: width 0.3s ease;
+  }
+
+  .progress-text {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  /* Controls Bar */
+  .controls-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 280px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .filter-input {
+    width: 100%;
+    padding: 0.75rem 2.5rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .filter-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+
+  .clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .filters-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .type-pills {
+    display: flex;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .type-pill {
+    background: none;
+    border: none;
+    padding: 0.45rem 0.9rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .type-pill:hover {
+    color: var(--text-primary);
+  }
+
+  .type-pill.active {
+    background: var(--primary);
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .sort-select {
+    padding: 0.55rem 1rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    outline: none;
+    cursor: pointer;
   }
 
   /* Assets Grid */
   .assets-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 1.5rem;
+    width: 100%;
   }
 
   .asset-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     overflow: hidden;
+    cursor: pointer;
+    transition: all var(--transition-fast);
     display: flex;
     flex-direction: column;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .asset-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--accent);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: var(--shadow-md);
   }
 
-  .asset-preview {
-    height: 170px;
-    background: #0f172a;
+  .card-thumb {
+    height: 150px;
+    background: var(--bg-surface-elevated);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -308,31 +935,39 @@ function formatSize(bytes: number) {
     position: relative;
   }
 
-  .asset-preview img {
+  .card-thumb-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.2s ease;
   }
 
-  .asset-card:hover .asset-preview img {
-    transform: scale(1.03);
-  }
-
-  .file-icon-placeholder {
+  .card-icon-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
     color: var(--text-muted);
   }
 
-  .asset-info {
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    flex: 1;
+  .preview-type-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-sm);
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--primary);
+    letter-spacing: 0.05em;
   }
 
-  .asset-name {
-    font-size: 0.9rem;
+  .card-details {
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .card-filename {
+    font-size: 0.88rem;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -340,61 +975,236 @@ function formatSize(bytes: number) {
     text-overflow: ellipsis;
   }
 
-  .asset-meta {
+  .card-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .empty-state-card,
+  .empty-filtered-card {
+    grid-column: 1 / -1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 4rem 2rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--primary);
+    margin-bottom: 1rem;
+  }
+
+  /* Modal Styles */
+  .asset-modal {
+    border: none;
+    border-radius: var(--radius-xl);
+    padding: 0;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    max-width: 900px;
+    width: 90vw;
+    box-shadow: var(--shadow-2xl);
+  }
+
+  .asset-modal::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-shell {
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .modal-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.25rem;
+  }
+
+  .modal-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    padding: 1.75rem;
+    overflow-y: auto;
+  }
+
+  .preview-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .preview-target {
+    background: var(--bg-body);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    min-height: 240px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    font-size: 0.775rem;
+    justify-content: center;
+    overflow: hidden;
   }
 
-  .meta-badge.slug {
-    background: var(--bg-subtle, rgba(255, 255, 255, 0.08));
+  .modal-hero-img {
+    max-width: 100%;
+    max-height: 380px;
+    object-fit: contain;
+  }
+
+  .modal-hero-video {
+    max-width: 100%;
+    max-height: 380px;
+  }
+
+  .modal-doc-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-muted);
+  }
+
+  .preview-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .preview-actions .btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .metadata-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: var(--text-secondary);
-    padding: 0.15rem 0.5rem;
-    border-radius: 6px;
-    font-family: var(--font-mono, monospace);
+    margin-bottom: 0.4rem;
   }
 
-  .meta-size {
+  .form-control {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-body);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    box-sizing: border-box;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+
+  .asset-meta-table {
+    background: var(--bg-body);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.85rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+  }
+
+  .meta-key {
     color: var(--text-muted);
     font-weight: 500;
   }
 
-  .asset-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: auto;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border-subtle);
+  .meta-val {
+    color: var(--text-primary);
+    word-break: break-all;
   }
 
-  .btn-action {
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+  }
+
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 0.65rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    background: var(--bg-subtle, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-subtle);
-    color: var(--text-primary);
-    font-size: 0.775rem;
-    font-weight: 500;
-    padding: 0.4rem 0.75rem;
-    border-radius: 6px;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.15s ease;
-    flex: 1;
-    justify-content: center;
+    gap: 0.4rem;
   }
 
-  .btn-action:hover {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
+  .btn-danger:hover {
+    background: #ef4444;
+    color: #ffffff;
   }
 
-  .btn-action.view-link {
-    flex: 0 0 auto;
-    padding: 0.4rem 0.5rem;
+  .hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 768px) {
+    .modal-body {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

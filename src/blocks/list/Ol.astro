@@ -1,0 +1,45 @@
+---
+import * as v from "valibot";
+import { olSchema, normalizeListStyleType, type OlProps } from "./schema";
+
+type Props = OlProps;
+
+const rawProps = Astro.props;
+const parsed = v.safeParse(olSchema, rawProps);
+const data = parsed.success ? parsed.output : rawProps;
+
+const rawType = (data as any)["list-style-type"] || data.listStyleType || "decimal";
+const computedType = normalizeListStyleType(rawType);
+const customClass = data.class || "";
+const customStyle = data.style || "";
+const start = data.start ? Number(data.start) : undefined;
+const reversed = data.reversed || undefined;
+---
+
+<ol
+  class:list={["complex-list-ol", customClass]}
+  start={start}
+  reversed={reversed}
+  style={`list-style-type: ${computedType} !important; ${customStyle}`}
+>
+  <slot />
+</ol>
+
+<style>
+  .complex-list-ol {
+    margin: 1.25rem 0;
+    padding-left: 1.75rem;
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+
+  .complex-list-ol :global(li) {
+    margin-bottom: 0.35rem;
+  }
+
+  .complex-list-ol :global(ul),
+  .complex-list-ol :global(ol) {
+    margin: 0.5rem 0 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+</style>

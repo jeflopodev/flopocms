@@ -2,7 +2,8 @@
 export const prerender = false;
 
 import RootLayout from "#/layouts/root-layout.astro";
-import { getDb } from "../../lib/db";
+import { eq } from "drizzle-orm";
+import { getDb, users } from "../../lib/db";
 import { verifyPassword } from "../../lib/auth";
 import { createSession } from "../../lib/session";
 
@@ -18,15 +19,16 @@ if (Astro.request.method === "POST") {
       errorMessage = "Please provide both username and password.";
     } else {
       const db = getDb(Astro.locals);
-      const user = await db
-        .prepare("SELECT * FROM users WHERE username = ?")
-        .bind(username)
-        .first<{ id: string; username: string; password_hash: string; salt: string }>();
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
 
       if (!user) {
         errorMessage = "Invalid username or password.";
       } else {
-        const isValid = await verifyPassword(password, user.salt, user.password_hash);
+        const isValid = await verifyPassword(password, user.salt, user.passwordHash);
         if (!isValid) {
           errorMessage = "Invalid username or password.";
         } else {

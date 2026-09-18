@@ -1,7 +1,10 @@
 ---
 export const prerender = false;
 
-import { getDb, type PostRow } from "../../../lib/db";
+import { eq, desc } from "drizzle-orm";
+import { getDb, posts as postsTable, assets as assetsTable, type Post, type Asset } from "../../../lib/db";
+import { templateOptions } from "../../../templates";
+import { blockDefinitions } from "../../../blocks";
 import "../../../styles/global.css";
 
 const { id } = Astro.params;
@@ -11,13 +14,21 @@ if (!id) {
 }
 
 const db = getDb(Astro.locals);
-const post = await db
-  .prepare("SELECT * FROM posts WHERE id = ?")
-  .bind(id)
-  .first<PostRow>();
+const [post] = await db
+  .select()
+  .from(postsTable)
+  .where(eq(postsTable.id, id))
+  .limit(1);
 
 if (!post) {
   return Astro.redirect("/admin/posts");
+}
+
+let initialAssets: Asset[] = [];
+try {
+  initialAssets = await db.select().from(assetsTable).orderBy(desc(assetsTable.createdAt));
+} catch (err) {
+  console.error("Failed to query assets:", err);
 }
 
 const user = Astro.locals.user || { username: post.author || "jeflopo" };
@@ -33,7 +44,8 @@ try {
   if (post.tags) parsedTags = [post.tags];
 }
 
-const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date().toISOString().split("T")[0];
+const rawPubDate = post.pubDate || (post as any).pub_date;
+const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toISOString().split("T")[0];
 ---
 
 <!doctype html>
@@ -150,28 +162,33 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
         <!-- Formatting Toolbar -->
         <div class="editor-toolbar">
           <div class="toolbar-group">
-            <button type="button" class="tool-btn" data-tool="bold" title="Bold (**text**)">
+            <button type="button" class="tool-btn" data-tool="bold" title="Bold (****)">
               <strong>B</strong>
             </button>
-            <button type="button" class="tool-btn" data-tool="italic" title="Italic (*text*)">
+            <button type="button" class="tool-btn" data-tool="italic" title="Italic (**)">
               <em>I</em>
             </button>
-            <button type="button" class="tool-btn" data-tool="strike" title="Strikethrough (~~text~~)">
+            <button type="button" class="tool-btn" data-tool="strike" title="Strikethrough (~~~~)">
               <s>S</s>
             </button>
           </div>
 
           <div class="toolbar-divider"></div>
 
-          <div class="toolbar-group">
+          <!-- Headings H1 to H6 -->
+          <div class="toolbar-group headings-group">
+            <button type="button" class="tool-btn" data-tool="h1" title="Heading 1 (# )">H1</button>
             <button type="button" class="tool-btn" data-tool="h2" title="Heading 2 (## )">H2</button>
             <button type="button" class="tool-btn" data-tool="h3" title="Heading 3 (### )">H3</button>
+            <button type="button" class="tool-btn" data-tool="h4" title="Heading 4 (#### )">H4</button>
+            <button type="button" class="tool-btn" data-tool="h5" title="Heading 5 (##### )">H5</button>
+            <button type="button" class="tool-btn" data-tool="h6" title="Heading 6 (###### )">H6</button>
           </div>
 
           <div class="toolbar-divider"></div>
 
           <div class="toolbar-group">
-            <button type="button" class="tool-btn" data-tool="link" title="Link ([text](url))">
+            <button type="button" class="tool-btn" data-tool="link" title="Link ([]())">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -217,16 +234,15 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
 
           <div class="toolbar-divider"></div>
 
-          <!-- Image Upload Tool -->
+          <!-- Global Asset Picker Tool Button -->
           <div class="toolbar-group">
-            <input type="file" id="editor-image-upload-input" accept="image/*" style="display: none;" />
-            <button type="button" id="editor-image-upload-btn" class="tool-btn image-btn" title="Upload co-located image (max 2MB)">
+            <button type="button" id="open-asset-modal-btn" class="tool-btn image-btn" title="Pick or upload global asset">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
-              <span>Add Image</span>
+              <span>Add Media</span>
             </button>
           </div>
         </div>
@@ -265,7 +281,12 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
           </div>
 
           <div class="form-group">
-            <label for="post-slug-field">URL Slug</label>
+            <div class="label-with-action">
+              <label for="post-slug-field">URL Slug</label>
+              <button type="button" id="resync-slug-btn" class="text-action-btn" title="Regenerate slug from title">
+                Re-generate
+              </button>
+            </div>
             <div class="slug-input-wrapper">
               <span class="slug-prefix">/blog/</span>
               <input
@@ -276,7 +297,20 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
                 placeholder="url-slug"
               />
             </div>
-            <span class="field-hint">Co-located folder: <code>src/content/blog/{post.slug}/</code></span>
+            <span class="field-hint">Auto-generated via <code>slugify</code> from title</span>
+          </div>
+
+          <!-- Template Selector -->
+          <div class="form-group">
+            <label for="post-template-select">Layout Template</label>
+            <select id="post-template-select" class="form-control">
+              {templateOptions.map((t) => (
+                <option value={t.id} selected={(post.template || "default") === t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <span class="field-hint">Single column vs Two columns (article | aside)</span>
           </div>
 
           <div class="form-group">
@@ -344,14 +378,19 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
 
           <div class="form-group">
             <label for="post-image-field">Featured / Hero Image</label>
-            <input
-              type="text"
-              id="post-image-field"
-              class="form-control"
-              value={post.featured_image || ""}
-              placeholder="./hero.webp"
-            />
-            <span class="field-hint">Relative co-located path: <code>./hero.webp</code></span>
+            <div class="input-with-button">
+              <input
+                type="text"
+                id="post-image-field"
+                class="form-control"
+                value={post.featuredImage || ""}
+                placeholder="/uploads/hero.webp"
+              />
+              <button type="button" id="browse-hero-image-btn" class="btn btn-secondary btn-sm" title="Pick from Asset Library">
+                Browse
+              </button>
+            </div>
+            <span class="field-hint">Global asset URL (e.g. <code>/uploads/hero.webp</code>)</span>
           </div>
         </div>
 
@@ -359,12 +398,62 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
         <div id="blocks-panel-content" class="panel-content">
           <div class="blocks-intro">
             <p>
-              Click any block card to insert it directly into your article. Auto-import enables zero manual import statements!
+              Click any block card to insert it into your article. All blocks are isolated, validated with Valibot, and globally imported!
             </p>
           </div>
 
+          <!-- Callout Alerts Block Card -->
+          <div class="block-card">
+            <div class="block-card-header">
+              <div class="block-icon alert">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;Callout /&gt;</h3>
+                <span class="block-desc">Accessible alert callouts</span>
+              </div>
+            </div>
+            <div class="callout-insert-grid">
+              <button type="button" class="btn-callout" data-callout="note">Note</button>
+              <button type="button" class="btn-callout" data-callout="tip">Tip</button>
+              <button type="button" class="btn-callout" data-callout="important">Important</button>
+              <button type="button" class="btn-callout" data-callout="warning">Warning</button>
+              <button type="button" class="btn-callout" data-callout="caution">Caution</button>
+            </div>
+          </div>
+
+          <!-- Complex List Block Card -->
+          <div class="block-card">
+            <div class="block-card-header">
+              <div class="block-icon list">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/>
+                  <line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/>
+                  <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;Ul /&gt; &amp; &lt;Ol /&gt;</h3>
+                <span class="block-desc">Nested list with custom list-style-type</span>
+              </div>
+            </div>
+            <p class="block-preview-code">
+              &lt;Ul list-style-type="disc"&gt;...&lt;/Ul&gt;
+            </p>
+            <button type="button" class="btn-insert-block" data-insert="list">
+              + Insert Complex List
+            </button>
+          </div>
+
           <!-- Amazon Product Card -->
-          <div class="block-card" data-block="amazon">
+          <div class="block-card">
             <div class="block-card-header">
               <div class="block-icon amazon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -375,11 +464,11 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
               </div>
               <div>
                 <h3 class="block-title">&lt;AmazonProduct /&gt;</h3>
-                <span class="block-desc">Interactive product showcase card</span>
+                <span class="block-desc">Product showcase with global assets</span>
               </div>
             </div>
             <p class="block-preview-code">
-              &lt;AmazonProduct asin="B0..." title="..." price="$..." /&gt;
+              &lt;AmazonProduct asin="B0..." price="$..." image="/uploads/..." /&gt;
             </p>
             <button type="button" class="btn-insert-block" data-insert="amazon">
               + Insert Product Block
@@ -387,7 +476,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
           </div>
 
           <!-- YouTube Embed Card -->
-          <div class="block-card" data-block="youtube">
+          <div class="block-card">
             <div class="block-card-header">
               <div class="block-icon youtube">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -396,7 +485,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
               </div>
               <div>
                 <h3 class="block-title">&lt;YouTube /&gt;</h3>
-                <span class="block-desc">Responsive video with breakout stretch</span>
+                <span class="block-desc">Responsive video embed</span>
               </div>
             </div>
             <p class="block-preview-code">
@@ -407,8 +496,30 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
             </button>
           </div>
 
+          <!-- Related Posts Block Card (D1-powered) -->
+          <div class="block-card">
+            <div class="block-card-header">
+              <div class="block-icon related">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="block-title">&lt;RelatedPosts /&gt;</h3>
+                <span class="block-desc">D1 database query based on categories</span>
+              </div>
+            </div>
+            <p class="block-preview-code">
+              &lt;RelatedPosts category="{post.category || 'General'}" limit=3 /&gt;
+            </p>
+            <button type="button" class="btn-insert-block" data-insert="related">
+              + Insert Related Posts
+            </button>
+          </div>
+
           <!-- JSON-LD Schema Card -->
-          <div class="block-card" data-block="schema">
+          <div class="block-card">
             <div class="block-card-header">
               <div class="block-icon schema">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -427,32 +538,68 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
               + Insert Schema Block
             </button>
           </div>
-
-          <!-- GitHub Style Alerts -->
-          <div class="block-card" data-block="alert">
-            <div class="block-card-header">
-              <div class="block-icon alert">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">Callout Alerts</h3>
-                <span class="block-desc">GitHub-style note, tip, or warning</span>
-              </div>
-            </div>
-            <div class="callout-insert-grid">
-              <button type="button" class="btn-callout" data-callout="NOTE">Note</button>
-              <button type="button" class="btn-callout" data-callout="TIP">Tip</button>
-              <button type="button" class="btn-callout" data-callout="IMPORTANT">Important</button>
-              <button type="button" class="btn-callout" data-callout="WARNING">Warning</button>
-            </div>
-          </div>
         </div>
       </aside>
     </main>
+
+    <!-- Centered Asset Picker Modal -->
+    <dialog id="editor-asset-modal" class="editor-asset-dialog">
+      <div class="asset-modal-shell">
+        <div class="asset-modal-header">
+          <div class="modal-tabs">
+            <button type="button" class="modal-tab-btn active" data-tab="library">Asset Library</button>
+            <button type="button" class="modal-tab-btn" data-tab="upload">Upload New Asset</button>
+          </div>
+          <button type="button" id="close-asset-modal-btn" class="modal-close-icon">&times;</button>
+        </div>
+
+        <div class="asset-modal-body">
+          <!-- Library Tab -->
+          <div id="tab-library-content" class="modal-tab-pane active">
+            <div class="modal-search-row">
+              <input
+                type="text"
+                id="modal-asset-search"
+                class="form-control"
+                placeholder="Search assets by filename..."
+              />
+            </div>
+            <div id="modal-assets-grid" class="modal-assets-grid">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Upload Tab -->
+          <div id="tab-upload-content" class="modal-tab-pane">
+            <div id="modal-dropzone" class="modal-dropzone">
+              <input type="file" id="modal-file-input" class="file-input-hidden" accept="image/*,video/*,application/pdf,application/zip" />
+              <div class="dropzone-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <h4>Drag and drop a file, or <span class="browse-highlight">browse</span></h4>
+              <p>Images up to 2 MiB, media/archives up to 25 MiB</p>
+              <div id="modal-upload-status" class="upload-status-text"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="asset-modal-footer">
+          <div id="selected-asset-info" class="selected-asset-info">
+            <span class="placeholder-text">No asset selected</span>
+          </div>
+          <div class="footer-actions">
+            <button type="button" id="cancel-asset-modal-btn" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="confirm-asset-modal-btn" class="btn btn-primary" disabled>
+              Insert Selected Asset
+            </button>
+          </div>
+        </div>
+      </div>
+    </dialog>
 
     <!-- Initial Data Payload -->
     <script id="initial-post-data" type="application/json" set:html={JSON.stringify({
@@ -463,26 +610,35 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       category: post.category || "General",
       tags: parsedTags,
       author: post.author || "jeflopo",
-      featured_image: post.featured_image || "",
-      content_mdx: post.content_mdx || "",
+      featured_image: post.featuredImage || (post as any).featured_image || "",
+      content_mdx: post.contentMdx || (post as any).content_mdx || "",
       status: post.status || "draft",
-      pub_date: post.pub_date || "",
+      template: post.template || "default",
+      pub_date: post.pubDate || (post as any).pub_date || "",
     })} />
+
+    <script id="initial-assets-data" type="application/json" set:html={JSON.stringify(initialAssets)} />
 
     <!-- CodeMirror & Editor Logic Script -->
     <script>
       import { EditorView, basicSetup } from "codemirror";
       import { markdown } from "@codemirror/lang-markdown";
+      import { slugify } from "../../../utils/slugify";
 
       // Parse initial data
       const dataScript = document.getElementById("initial-post-data");
       const postData = JSON.parse(dataScript?.textContent || "{}");
+
+      const assetsScript = document.getElementById("initial-assets-data");
+      let allAssets = JSON.parse(assetsScript?.textContent || "[]");
 
       // DOM Elements
       const container = document.getElementById("codemirror-container");
       const topbarTitleInput = document.getElementById("topbar-title-input") as HTMLInputElement;
       const postTitleField = document.getElementById("post-title-field") as HTMLInputElement;
       const postSlugField = document.getElementById("post-slug-field") as HTMLInputElement;
+      const resyncSlugBtn = document.getElementById("resync-slug-btn");
+      const postTemplateSelect = document.getElementById("post-template-select") as HTMLSelectElement;
       const postDescField = document.getElementById("post-desc-field") as HTMLTextAreaElement;
       const postCategoryField = document.getElementById("post-category-field") as HTMLSelectElement;
       const postAuthorField = document.getElementById("post-author-field") as HTMLSelectElement;
@@ -490,6 +646,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       const postStatusSelect = document.getElementById("post-status-select") as HTMLSelectElement;
       const postTagsField = document.getElementById("post-tags-field") as HTMLInputElement;
       const postImageField = document.getElementById("post-image-field") as HTMLInputElement;
+      const browseHeroImageBtn = document.getElementById("browse-hero-image-btn");
       const saveIndicator = document.getElementById("save-indicator");
       const saveIndicatorText = saveIndicator?.querySelector(".indicator-text");
       const manualSaveBtn = document.getElementById("manual-save-btn");
@@ -511,6 +668,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       let isSaving = false;
       let isDirty = false;
       let autoSaveTimer: any = null;
+      let isSlugManuallyEdited = false;
 
       // Initialize CodeMirror 6
       const themeConfig = EditorView.theme({
@@ -564,25 +722,52 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
         parent: container!,
       });
 
-      // Synchronize title inputs
-      topbarTitleInput?.addEventListener("input", (e) => {
-        const val = (e.target as HTMLInputElement).value;
-        if (postTitleField) postTitleField.value = val;
+      // Synchronize title inputs & auto-generate slug with slugify
+      function handleTitleInput(val: string) {
+        if (topbarTitleInput && topbarTitleInput.value !== val) topbarTitleInput.value = val;
+        if (postTitleField && postTitleField.value !== val) postTitleField.value = val;
+
+        if (!isSlugManuallyEdited && val.trim()) {
+          const autoSlug = slugify(val);
+          if (postSlugField) {
+            postSlugField.value = autoSlug;
+            if (previewLink) previewLink.href = `/blog/${autoSlug}`;
+          }
+        }
         markDirty();
+      }
+
+      topbarTitleInput?.addEventListener("input", (e) => {
+        handleTitleInput((e.target as HTMLInputElement).value);
       });
 
       postTitleField?.addEventListener("input", (e) => {
-        const val = (e.target as HTMLInputElement).value;
-        if (topbarTitleInput) topbarTitleInput.value = val;
+        handleTitleInput((e.target as HTMLInputElement).value);
+      });
+
+      postSlugField?.addEventListener("input", () => {
+        isSlugManuallyEdited = true;
+        if (previewLink) previewLink.href = `/blog/${postSlugField.value.trim()}`;
         markDirty();
       });
 
+      resyncSlugBtn?.addEventListener("click", () => {
+        const title = topbarTitleInput.value.trim() || postTitleField.value.trim();
+        if (title) {
+          const autoSlug = slugify(title);
+          postSlugField.value = autoSlug;
+          isSlugManuallyEdited = false;
+          if (previewLink) previewLink.href = `/blog/${autoSlug}`;
+          markDirty();
+        }
+      });
+
       // Form change listeners
-      [postSlugField, postDescField, postCategoryField, postAuthorField, postPubdateField, postStatusSelect, postTagsField, postImageField].forEach((el) => {
+      [postTemplateSelect, postDescField, postCategoryField, postAuthorField, postPubdateField, postStatusSelect, postTagsField, postImageField].forEach((el) => {
         el?.addEventListener("input", () => {
-          if (el === postSlugField && previewLink) {
-            previewLink.href = `/blog/${postSlugField.value}`;
-          }
+          markDirty();
+        });
+        el?.addEventListener("change", () => {
           markDirty();
         });
       });
@@ -612,19 +797,11 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       }
 
       toggleSettingsBtn?.addEventListener("click", () => {
-        if (activePanel === "settings") {
-          setPanel("none");
-        } else {
-          setPanel("settings");
-        }
+        setPanel(activePanel === "settings" ? "none" : "settings");
       });
 
       toggleBlocksBtn?.addEventListener("click", () => {
-        if (activePanel === "blocks") {
-          setPanel("none");
-        } else {
-          setPanel("blocks");
-        }
+        setPanel(activePanel === "blocks" ? "none" : "blocks");
       });
 
       drawerCloseBtn?.addEventListener("click", () => {
@@ -642,13 +819,135 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
         markDirty();
       }
 
-      function wrapSelection(prefix: string, suffix: string) {
-        const { from, to } = editorView.state.selection.main;
-        const selected = editorView.state.sliceDoc(from, to) || "text";
-        const snippet = `${prefix}${selected}${suffix}`;
+      // Markdown Formatting Engine with Caret & Selection Rules
+      function applyFormatting(tool: string) {
+        const selection = editorView.state.selection.main;
+        const hasSelection = !selection.empty;
+        const selectedText = editorView.state.sliceDoc(selection.from, selection.to);
+
+        let insertText = "";
+        let newAnchor = selection.from;
+        let newHead = selection.from;
+
+        switch (tool) {
+          case "bold":
+            if (hasSelection) {
+              insertText = `**${selectedText}**\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `****`;
+              newAnchor = selection.from + 2; // Caret inside: **|**
+              newHead = newAnchor;
+            }
+            break;
+
+          case "italic":
+            if (hasSelection) {
+              insertText = `*${selectedText}*\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `**`;
+              newAnchor = selection.from + 1; // Caret inside: *|*
+              newHead = newAnchor;
+            }
+            break;
+
+          case "strike":
+            if (hasSelection) {
+              insertText = `~~${selectedText}~~\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `~~~~`;
+              newAnchor = selection.from + 2; // Caret inside: ~~|~~
+              newHead = newAnchor;
+            }
+            break;
+
+          case "link":
+            if (hasSelection) {
+              insertText = `[${selectedText}]()\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `[]()`;
+              newAnchor = selection.from + 1; // Caret inside: [|]()
+              newHead = newAnchor;
+            }
+            break;
+
+          case "h1":
+          case "h2":
+          case "h3":
+          case "h4":
+          case "h5":
+          case "h6": {
+            const level = parseInt(tool.replace("h", ""), 10);
+            const prefix = "#".repeat(level) + " ";
+            if (hasSelection) {
+              insertText = `${prefix}${selectedText}\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = prefix;
+              newAnchor = selection.from + prefix.length;
+              newHead = newAnchor;
+            }
+            break;
+          }
+
+          case "quote":
+            if (hasSelection) {
+              insertText = `> ${selectedText}\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `> `;
+              newAnchor = selection.from + 2;
+              newHead = newAnchor;
+            }
+            break;
+
+          case "code":
+            if (hasSelection) {
+              insertText = `\`\`\`\n${selectedText}\n\`\`\`\n`;
+              newAnchor = selection.from + insertText.length;
+              newHead = newAnchor;
+            } else {
+              insertText = `\`\`\`\n\n\`\`\``;
+              newAnchor = selection.from + 4; // Inside empty code block
+              newHead = newAnchor;
+            }
+            break;
+
+          case "bullet":
+            if (hasSelection) {
+              insertText = `- ${selectedText}\n`;
+              newAnchor = selection.from + insertText.length;
+            } else {
+              insertText = `- `;
+              newAnchor = selection.from + 2;
+            }
+            newHead = newAnchor;
+            break;
+
+          case "numbered":
+            if (hasSelection) {
+              insertText = `1. ${selectedText}\n`;
+              newAnchor = selection.from + insertText.length;
+            } else {
+              insertText = `1. `;
+              newAnchor = selection.from + 3;
+            }
+            newHead = newAnchor;
+            break;
+        }
+
         editorView.dispatch({
-          changes: { from, to, insert: snippet },
-          selection: { anchor: from + prefix.length, head: from + snippet.length - suffix.length },
+          changes: { from: selection.from, to: selection.to, insert: insertText },
+          selection: { anchor: newAnchor, head: newHead },
         });
         editorView.focus();
         markDirty();
@@ -658,38 +957,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const tool = (btn as HTMLElement).dataset.tool;
-          switch (tool) {
-            case "bold":
-              wrapSelection("**", "**");
-              break;
-            case "italic":
-              wrapSelection("*", "*");
-              break;
-            case "strike":
-              wrapSelection("~~", "~~");
-              break;
-            case "h2":
-              insertSnippet("\n## Section Title\n");
-              break;
-            case "h3":
-              insertSnippet("\n### Subsection Title\n");
-              break;
-            case "link":
-              wrapSelection("[", "](https://example.com)");
-              break;
-            case "quote":
-              insertSnippet("\n> Quoted paragraph\n");
-              break;
-            case "code":
-              insertSnippet("\n```javascript\n// code snippet\n```\n");
-              break;
-            case "bullet":
-              insertSnippet("\n- Item 1\n- Item 2\n");
-              break;
-            case "numbered":
-              insertSnippet("\n1. First step\n2. Second step\n");
-              break;
-          }
+          if (tool) applyFormatting(tool);
         });
       });
 
@@ -700,11 +968,19 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
           const type = target.dataset.insert;
           if (type === "amazon") {
             insertSnippet(
-              `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="./product.webp"\n/>\n`
+              `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="/uploads/product.webp"\n/>\n`
             );
           } else if (type === "youtube") {
             insertSnippet(
               `\n<YouTube id="dQw4w9WgXcQ" title="Video Title" stretch="wide" />\n`
+            );
+          } else if (type === "list") {
+            insertSnippet(
+              `\n<Ul list-style-type="disc">\n  <li>First key takeaway</li>\n  <Ol list-style-type="roman">\n    <li>Nested roman detail 1</li>\n    <li>Nested roman detail 2</li>\n  </Ol>\n  <li>Second key takeaway</li>\n</Ul>\n`
+            );
+          } else if (type === "related") {
+            insertSnippet(
+              `\n<RelatedPosts category="${postCategoryField.value || 'General'}" limit={3} />\n`
             );
           } else if (type === "schema") {
             insertSnippet(
@@ -717,37 +993,185 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       // Callouts insertion
       document.querySelectorAll(".btn-callout").forEach((btn) => {
         btn.addEventListener("click", (e) => {
-          const callout = (e.currentTarget as HTMLElement).dataset.callout || "NOTE";
-          insertSnippet(`\n> [!${callout}]\n> Enter callout explanation here.\n`);
+          const variant = (e.currentTarget as HTMLElement).dataset.callout || "note";
+          insertSnippet(`\n<Callout variant="${variant}">\n  Enter callout explanation here.\n</Callout>\n`);
         });
       });
 
-      // Image Upload Handling
-      const imageFileInput = document.getElementById("editor-image-upload-input") as HTMLInputElement;
-      const imageUploadBtn = document.getElementById("editor-image-upload-btn");
+      // ==================== Asset Picker Modal Logic ====================
+      const assetModal = document.getElementById("editor-asset-modal") as HTMLDialogElement;
+      const openAssetModalBtn = document.getElementById("open-asset-modal-btn");
+      const closeAssetModalBtn = document.getElementById("close-asset-modal-btn");
+      const cancelAssetModalBtn = document.getElementById("cancel-asset-modal-btn");
+      const confirmAssetModalBtn = document.getElementById("confirm-asset-modal-btn") as HTMLButtonElement;
+      const modalSearchInput = document.getElementById("modal-asset-search") as HTMLInputElement;
+      const modalAssetsGrid = document.getElementById("modal-assets-grid");
+      const selectedAssetInfo = document.getElementById("selected-asset-info");
+      const modalDropzone = document.getElementById("modal-dropzone");
+      const modalFileInput = document.getElementById("modal-file-input") as HTMLInputElement;
+      const modalUploadStatus = document.getElementById("modal-upload-status");
+      const modalTabBtns = document.querySelectorAll(".modal-tab-btn");
 
-      imageUploadBtn?.addEventListener("click", () => {
-        imageFileInput?.click();
+      let pickerTarget: "editor" | "featured" = "editor";
+      let pickedAsset: any = null;
+
+      function openAssetPicker(target: "editor" | "featured") {
+        pickerTarget = target;
+        pickedAsset = null;
+        if (confirmAssetModalBtn) {
+          confirmAssetModalBtn.disabled = true;
+          confirmAssetModalBtn.textContent = target === "featured" ? "Set as Featured Image" : "Insert into Article";
+        }
+        if (selectedAssetInfo) {
+          selectedAssetInfo.innerHTML = `<span class="placeholder-text">Click an asset to select it</span>`;
+        }
+        switchModalTab("library");
+        renderModalAssets();
+        assetModal.showModal();
+      }
+
+      openAssetModalBtn?.addEventListener("click", () => openAssetPicker("editor"));
+      browseHeroImageBtn?.addEventListener("click", () => openAssetPicker("featured"));
+
+      closeAssetModalBtn?.addEventListener("click", () => assetModal.close());
+      cancelAssetModalBtn?.addEventListener("click", () => assetModal.close());
+
+      function switchModalTab(tab: "library" | "upload") {
+        modalTabBtns.forEach((b) => {
+          const btn = b as HTMLElement;
+          if (btn.dataset.tab === tab) btn.classList.add("active");
+          else btn.classList.remove("active");
+        });
+
+        const libPane = document.getElementById("tab-library-content");
+        const uploadPane = document.getElementById("tab-upload-content");
+        if (tab === "library") {
+          libPane?.classList.add("active");
+          uploadPane?.classList.remove("active");
+        } else {
+          uploadPane?.classList.add("active");
+          libPane?.classList.remove("active");
+        }
+      }
+
+      modalTabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = (btn as HTMLElement).dataset.tab as "library" | "upload";
+          switchModalTab(tab);
+        });
       });
 
-      imageFileInput?.addEventListener("change", async () => {
-        const file = imageFileInput.files?.[0];
-        if (!file) return;
+      function renderModalAssets() {
+        if (!modalAssetsGrid) return;
+        const q = modalSearchInput?.value.trim().toLowerCase() || "";
+        const filtered = allAssets.filter((a: any) => {
+          if (!q) return true;
+          return a.filename.toLowerCase().includes(q) || (a.title && a.title.toLowerCase().includes(q));
+        });
 
-        if (file.size > 2 * 1024 * 1024) {
-          alert(`Image exceeds 2MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please optimize before uploading.`);
-          imageFileInput.value = "";
+        if (filtered.length === 0) {
+          modalAssetsGrid.innerHTML = `<div class="modal-empty-state"><p>No assets found</p></div>`;
           return;
         }
 
-        const currentSlug = postSlugField.value.trim() || postData.slug;
+        modalAssetsGrid.innerHTML = "";
+        for (const a of filtered) {
+          const card = document.createElement("div");
+          card.className = `modal-asset-item ${pickedAsset?.id === a.id ? "selected" : ""}`;
+
+          let thumb = "";
+          if (a.mimeType.startsWith("image/")) {
+            thumb = `<img src="${a.url}" alt="${a.filename}" loading="lazy" />`;
+          } else {
+            thumb = `
+              <div class="file-icon-badge">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>${a.filename.split('.').pop()?.toUpperCase() || "FILE"}</span>
+              </div>
+            `;
+          }
+
+          card.innerHTML = `
+            <div class="modal-asset-thumb">${thumb}</div>
+            <span class="modal-asset-name" title="${a.filename}">${a.filename}</span>
+          `;
+
+          card.addEventListener("click", () => {
+            document.querySelectorAll(".modal-asset-item").forEach((el) => el.classList.remove("selected"));
+            card.classList.add("selected");
+            pickedAsset = a;
+            if (confirmAssetModalBtn) confirmAssetModalBtn.disabled = false;
+            if (selectedAssetInfo) {
+              selectedAssetInfo.innerHTML = `<strong>Selected:</strong> <span>${a.filename}</span>`;
+            }
+          });
+
+          modalAssetsGrid.appendChild(card);
+        }
+      }
+
+      modalSearchInput?.addEventListener("input", renderModalAssets);
+
+      confirmAssetModalBtn?.addEventListener("click", () => {
+        if (!pickedAsset) return;
+
+        if (pickerTarget === "featured") {
+          postImageField.value = pickedAsset.url;
+          markDirty();
+        } else {
+          // Insert into editor
+          if (pickedAsset.mimeType.startsWith("image/")) {
+            insertSnippet(`\n![${pickedAsset.altText || pickedAsset.filename}](${pickedAsset.url})\n`);
+          } else {
+            insertSnippet(`\n<a href="${pickedAsset.url}" download="${pickedAsset.filename}">${pickedAsset.title || pickedAsset.filename}</a>\n`);
+          }
+        }
+        assetModal.close();
+      });
+
+      // Modal Upload Handling
+      modalDropzone?.addEventListener("click", () => modalFileInput?.click());
+      modalDropzone?.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        modalDropzone.classList.add("dragover");
+      });
+      modalDropzone?.addEventListener("dragleave", () => {
+        modalDropzone.classList.remove("dragover");
+      });
+      modalDropzone?.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        modalDropzone.classList.remove("dragover");
+        if (e.dataTransfer?.files?.[0]) {
+          await uploadFromModal(e.dataTransfer.files[0]);
+        }
+      });
+
+      modalFileInput?.addEventListener("change", async () => {
+        if (modalFileInput.files?.[0]) {
+          await uploadFromModal(modalFileInput.files[0]);
+          modalFileInput.value = "";
+        }
+      });
+
+      async function uploadFromModal(file: File) {
+        const isImg = file.type.startsWith("image/");
+        const maxSize = isImg ? 2 * 1024 * 1024 : 25 * 1024 * 1024;
+        const maxLabel = isImg ? "2 MiB" : "25 MiB";
+
+        if (file.size > maxSize) {
+          alert(`File "${file.name}" exceeds the ${maxLabel} size limit.`);
+          return;
+        }
+
+        if (modalUploadStatus) {
+          modalUploadStatus.textContent = `Uploading ${file.name}...`;
+        }
+
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("slug", currentSlug);
-
-        if (imageUploadBtn) {
-          imageUploadBtn.innerHTML = `<span>Uploading...</span>`;
-        }
 
         try {
           const res = await fetch("/api/admin/assets/upload", {
@@ -755,32 +1179,38 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
             body: formData,
           });
           const data = await res.json();
-          if (data.success && data.snippet) {
-            insertSnippet(`\n${data.snippet}\n`);
-            // Set as hero image if hero image is empty
-            if (!postImageField.value) {
-              postImageField.value = `./${data.filename}`;
-              markDirty();
+          if (data.success) {
+            const newAsset = {
+              id: data.assetId,
+              filename: data.filename,
+              originalName: file.name,
+              mimeType: data.mimeType || file.type,
+              byteSize: data.byteSize || file.size,
+              url: data.url,
+              title: data.filename,
+              altText: data.filename,
+              description: "",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            allAssets.unshift(newAsset);
+            pickedAsset = newAsset;
+            if (modalUploadStatus) modalUploadStatus.textContent = "Upload successful!";
+            switchModalTab("library");
+            renderModalAssets();
+            if (confirmAssetModalBtn) confirmAssetModalBtn.disabled = false;
+            if (selectedAssetInfo) {
+              selectedAssetInfo.innerHTML = `<strong>Selected:</strong> <span>${newAsset.filename}</span>`;
             }
           } else {
-            alert(data.error || "Failed to upload image");
+            alert(data.error || "Upload failed");
+            if (modalUploadStatus) modalUploadStatus.textContent = "";
           }
         } catch {
-          alert("Error contacting upload server");
-        } finally {
-          imageFileInput.value = "";
-          if (imageUploadBtn) {
-            imageUploadBtn.innerHTML = `
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <span>Add Image</span>
-            `;
-          }
+          alert("Error contacting server");
+          if (modalUploadStatus) modalUploadStatus.textContent = "";
         }
-      });
+      }
 
       // Save logic
       function markDirty() {
@@ -821,7 +1251,8 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
           featured_image: postImageField.value.trim(),
           content_mdx: editorView.state.doc.toString(),
           status: postStatusSelect.value,
-          pub_date: postPubdateField.value,
+          template: postTemplateSelect.value || "default",
+          pub_date: postPubdateField.value ? `${postPubdateField.value}T12:00:00.000Z` : undefined,
         };
 
         try {
@@ -838,6 +1269,10 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
               saveIndicator.className = "save-indicator saved";
               if (saveIndicatorText) saveIndicatorText.textContent = "Saved to D1";
             }
+            if (statusBadge) {
+              statusBadge.className = `status-tag ${payload.status}`;
+              statusBadge.textContent = payload.status === "published" ? "Published" : "Draft";
+            }
           } else {
             if (saveIndicator) {
               saveIndicator.className = "save-indicator error";
@@ -847,7 +1282,7 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
         } catch {
           if (saveIndicator) {
             saveIndicator.className = "save-indicator error";
-            if (saveIndicatorText) saveIndicatorText.textContent = "Connection error";
+            if (saveIndicatorText) saveIndicatorText.textContent = "Network error";
           }
         } finally {
           isSaving = false;
@@ -855,19 +1290,17 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
       }
 
       manualSaveBtn?.addEventListener("click", () => {
+        clearTimeout(autoSaveTimer);
         savePost();
       });
 
-      // Publish to GitHub Logic
+      // Publish logic
       publishBtn?.addEventListener("click", async () => {
-        const title = topbarTitleInput.value.trim() || postData.title;
-        const confirmPublish = confirm(`Are you sure you want to publish "${title}" to GitHub main branch?`);
-        if (!confirmPublish) return;
+        if (isDirty) {
+          await savePost();
+        }
 
-        // First save draft
-        await savePost();
-
-        publishBtn.setAttribute("disabled", "true");
+        const origHtml = publishBtn.innerHTML;
         publishBtn.innerHTML = `<span>Publishing...</span>`;
 
         try {
@@ -879,622 +1312,715 @@ const pubDateFormatted = post.pub_date ? post.pub_date.split("T")[0] : new Date(
 
           const data = await res.json();
           if (data.success) {
-            alert(data.message || "Article published successfully!");
+            postStatusSelect.value = "published";
             if (statusBadge) {
               statusBadge.className = "status-tag published";
               statusBadge.textContent = "Published";
             }
-            if (postStatusSelect) {
-              postStatusSelect.value = "published";
-            }
+            alert(data.message || "Published successfully!");
           } else {
-            alert(data.error || "Publishing failed");
+            alert(`Publishing failed: ${data.error}`);
           }
         } catch {
-          alert("Error contacting publishing endpoint");
+          alert("Error publishing article");
         } finally {
-          publishBtn.removeAttribute("disabled");
-          publishBtn.innerHTML = `
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-            Publish
-          `;
+          publishBtn.innerHTML = origHtml;
         }
       });
     </script>
+
+    <style>
+      .editor-workspace-body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-body);
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .editor-topbar {
+        height: 56px;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.25rem;
+        flex-shrink: 0;
+        z-index: 20;
+      }
+
+      .topbar-left, .topbar-right, .topbar-center {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .back-link {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.88rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: var(--radius-sm);
+        transition: all var(--transition-fast);
+      }
+
+      .back-link:hover {
+        background: rgba(99, 102, 241, 0.08);
+        color: var(--text-primary);
+      }
+
+      .topbar-divider {
+        width: 1px;
+        height: 24px;
+        background: var(--border-subtle);
+      }
+
+      .article-meta-header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .topbar-title-input {
+        background: transparent;
+        border: none;
+        outline: none;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        width: 240px;
+        transition: width var(--transition-fast);
+      }
+
+      .topbar-title-input:focus {
+        width: 320px;
+      }
+
+      .status-tag {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 0.2rem 0.55rem;
+        border-radius: var(--radius-full);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .status-tag.published {
+        background: rgba(16, 185, 129, 0.15);
+        color: #059669;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+      }
+
+      .status-tag.draft {
+        background: rgba(245, 158, 11, 0.15);
+        color: #d97706;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+
+      .save-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .indicator-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--text-muted);
+      }
+
+      .save-indicator.saved .indicator-dot {
+        background-color: #10b981;
+      }
+
+      .save-indicator.unsaved .indicator-dot {
+        background-color: #f59e0b;
+      }
+
+      .save-indicator.saving .indicator-dot {
+        background-color: #6366f1;
+        animation: pulse 1s infinite;
+      }
+
+      .save-indicator.error .indicator-dot {
+        background-color: #ef4444;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      .panel-toggle-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+        padding: 0.4rem 0.75rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .panel-toggle-btn:hover {
+        background: rgba(99, 102, 241, 0.08);
+        color: var(--text-primary);
+      }
+
+      .panel-toggle-btn.active {
+        background: rgba(99, 102, 241, 0.15);
+        color: var(--primary);
+        border-color: rgba(99, 102, 241, 0.3);
+      }
+
+      /* Workspace */
+      .editor-workspace {
+        flex: 1;
+        display: flex;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .editor-stage {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--bg-surface);
+      }
+
+      .editor-toolbar {
+        height: 44px;
+        background: var(--bg-surface-elevated);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        padding: 0 1rem;
+        gap: 0.4rem;
+        flex-shrink: 0;
+        overflow-x: auto;
+      }
+
+      .toolbar-group {
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+      }
+
+      .toolbar-divider {
+        width: 1px;
+        height: 18px;
+        background: var(--border-subtle);
+        margin: 0 0.3rem;
+      }
+
+      .tool-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        min-width: 28px;
+        height: 28px;
+        border-radius: var(--radius-sm);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.82rem;
+        padding: 0 0.4rem;
+        transition: all var(--transition-fast);
+      }
+
+      .tool-btn:hover {
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--primary);
+      }
+
+      .image-btn {
+        gap: 0.35rem;
+        padding: 0 0.6rem;
+        background: rgba(99, 102, 241, 0.08);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .codemirror-container {
+        flex: 1;
+        overflow: hidden;
+      }
+
+      /* Drawer */
+      .editor-drawer {
+        width: 0;
+        background: var(--bg-surface);
+        border-left: 1px solid var(--border-subtle);
+        display: flex;
+        flex-direction: column;
+        transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      .editor-drawer.open {
+        width: 360px;
+      }
+
+      .drawer-header {
+        height: 48px;
+        border-bottom: 1px solid var(--border-subtle);
+        padding: 0 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+      }
+
+      .drawer-title-group {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .drawer-heading {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .drawer-badge {
+        font-size: 0.68rem;
+        padding: 0.15rem 0.45rem;
+        border-radius: var(--radius-sm);
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .drawer-close-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.2rem;
+      }
+
+      .panel-content {
+        display: none;
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.25rem;
+      }
+
+      .panel-content.active {
+        display: block;
+      }
+
+      .label-with-action {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.35rem;
+      }
+
+      .label-with-action label {
+        margin-bottom: 0;
+      }
+
+      .text-action-btn {
+        background: none;
+        border: none;
+        color: var(--primary-light);
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+      }
+
+      .form-group {
+        margin-bottom: 1.15rem;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 0.35rem;
+      }
+
+      .form-control {
+        width: 100%;
+        padding: 0.55rem 0.75rem;
+        border-radius: var(--radius-sm);
+        background: var(--bg-body);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        font-size: 0.88rem;
+        box-sizing: border-box;
+      }
+
+      .form-control:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+
+      .form-row {
+        display: flex;
+        gap: 0.75rem;
+      }
+
+      .flex-1 {
+        flex: 1;
+      }
+
+      .slug-input-wrapper {
+        display: flex;
+        align-items: center;
+        background: var(--bg-body);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+      }
+
+      .slug-prefix {
+        padding: 0 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        background: rgba(0, 0, 0, 0.04);
+        border-right: 1px solid var(--border-subtle);
+      }
+
+      .slug-field {
+        border: none;
+        border-radius: 0;
+      }
+
+      .input-with-button {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .btn-sm {
+        padding: 0.45rem 0.75rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+
+      .field-hint {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.3rem;
+      }
+
+      /* Blocks Drawer */
+      .blocks-intro p {
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        margin: 0 0 1rem;
+        line-height: 1.45;
+      }
+
+      .block-card {
+        background: var(--bg-surface-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .block-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.6rem;
+      }
+
+      .block-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-sm);
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .block-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .block-desc {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .block-preview-code {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        background: var(--bg-body);
+        padding: 0.4rem 0.6rem;
+        border-radius: var(--radius-sm);
+        margin: 0.5rem 0;
+        color: var(--text-secondary);
+        overflow-x: auto;
+      }
+
+      .btn-insert-block {
+        width: 100%;
+        padding: 0.45rem;
+        background: transparent;
+        border: 1px dashed var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--primary-light);
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .btn-insert-block:hover {
+        background: rgba(99, 102, 241, 0.08);
+        border-color: var(--primary);
+      }
+
+      .callout-insert-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.35rem;
+      }
+
+      .btn-callout {
+        padding: 0.35rem 0.2rem;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-body);
+        border-radius: var(--radius-sm);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+      }
+
+      .btn-callout:hover {
+        background: rgba(99, 102, 241, 0.12);
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+
+      /* Asset Picker Dialog Modal */
+      .editor-asset-dialog {
+        border: none;
+        border-radius: var(--radius-xl);
+        padding: 0;
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        max-width: 780px;
+        width: 90vw;
+        box-shadow: var(--shadow-2xl);
+      }
+
+      .editor-asset-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+      }
+
+      .asset-modal-shell {
+        display: flex;
+        flex-direction: column;
+        max-height: 80vh;
+      }
+
+      .asset-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .modal-tabs {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .modal-tab-btn {
+        background: none;
+        border: none;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        padding: 0.4rem 0.8rem;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+      }
+
+      .modal-tab-btn.active {
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--primary);
+      }
+
+      .modal-close-icon {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: var(--text-muted);
+        cursor: pointer;
+      }
+
+      .asset-modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .modal-tab-pane {
+        display: none;
+      }
+
+      .modal-tab-pane.active {
+        display: block;
+      }
+
+      .modal-search-row {
+        margin-bottom: 1.25rem;
+      }
+
+      .modal-assets-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1rem;
+        max-height: 340px;
+        overflow-y: auto;
+      }
+
+      .modal-asset-item {
+        border: 2px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background: var(--bg-body);
+        padding: 0.5rem;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        transition: all var(--transition-fast);
+      }
+
+      .modal-asset-item:hover {
+        border-color: rgba(99, 102, 241, 0.5);
+      }
+
+      .modal-asset-item.selected {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.08);
+      }
+
+      .modal-asset-thumb {
+        width: 100%;
+        height: 90px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: var(--radius-sm);
+        background: var(--bg-surface);
+        margin-bottom: 0.4rem;
+      }
+
+      .modal-asset-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .file-icon-badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        color: var(--text-muted);
+        font-size: 0.65rem;
+        font-weight: 700;
+      }
+
+      .modal-asset-name {
+        font-size: 0.78rem;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      /* Modal Upload Dropzone */
+      .modal-dropzone {
+        border: 2px dashed rgba(99, 102, 241, 0.4);
+        background: rgba(99, 102, 241, 0.04);
+        border-radius: var(--radius-lg);
+        padding: 3rem 1.5rem;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .modal-dropzone:hover,
+      .modal-dropzone.dragover {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.1);
+      }
+
+      .browse-highlight {
+        color: var(--primary);
+        text-decoration: underline;
+      }
+
+      .upload-status-text {
+        font-size: 0.85rem;
+        color: var(--primary);
+        font-weight: 600;
+        margin-top: 0.5rem;
+      }
+
+      .asset-modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border-subtle);
+      }
+
+      .selected-asset-info {
+        font-size: 0.85rem;
+      }
+
+      .placeholder-text {
+        color: var(--text-muted);
+      }
+
+      .footer-actions {
+        display: flex;
+        gap: 0.75rem;
+      }
+    </style>
   </body>
 </html>
-
-<style>
-  /* Standalone Full-Viewport Editor */
-  .editor-workspace-body {
-    margin: 0;
-    padding: 0;
-    background-color: var(--bg-surface);
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* Top Bar */
-  .editor-topbar {
-    height: 56px;
-    background: var(--bg-surface);
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 1.25rem;
-    gap: 1rem;
-    flex-shrink: 0;
-    z-index: 20;
-  }
-
-  .topbar-left,
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--text-muted);
-    text-decoration: none;
-    font-size: 0.875rem;
-    font-weight: 500;
-    padding: 0.35rem 0.6rem;
-    border-radius: var(--radius-sm);
-    transition: all var(--transition-fast);
-  }
-
-  .back-link:hover {
-    color: var(--text-primary);
-    background: var(--bg-surface-elevated);
-  }
-
-  .topbar-divider {
-    width: 1px;
-    height: 22px;
-    background: var(--border-subtle);
-  }
-
-  .article-meta-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .topbar-title-input {
-    border: 1px solid transparent;
-    background: transparent;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius-sm);
-    width: 280px;
-    transition: all var(--transition-fast);
-  }
-
-  .topbar-title-input:hover,
-  .topbar-title-input:focus {
-    border-color: var(--border-strong);
-    background: var(--bg-surface-elevated);
-    outline: none;
-  }
-
-  .status-tag {
-    font-size: 0.725rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.2rem 0.55rem;
-    border-radius: var(--radius-full);
-  }
-
-  .status-tag.draft {
-    background: #fef3c7;
-    color: #92400e;
-  }
-
-  .status-tag.published {
-    background: #dcfce7;
-    color: #166534;
-  }
-
-  /* Center Save Indicator */
-  .save-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.8rem;
-    font-weight: 500;
-    padding: 0.25rem 0.65rem;
-    border-radius: var(--radius-full);
-    background: var(--bg-surface-elevated);
-  }
-
-  .indicator-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-  }
-
-  .save-indicator.saved .indicator-dot {
-    background: #10b981;
-  }
-  .save-indicator.saved {
-    color: var(--text-muted);
-  }
-
-  .save-indicator.saving .indicator-dot {
-    background: #f59e0b;
-    animation: pulse 1s infinite;
-  }
-  .save-indicator.saving {
-    color: #b45309;
-  }
-
-  .save-indicator.unsaved .indicator-dot {
-    background: #9ca3af;
-  }
-  .save-indicator.unsaved {
-    color: var(--text-muted);
-  }
-
-  .save-indicator.error .indicator-dot {
-    background: #ef4444;
-  }
-  .save-indicator.error {
-    color: #b91c1c;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.85); }
-  }
-
-  /* Buttons */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.85rem;
-    font-size: 0.825rem;
-    font-weight: 500;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-decoration: none;
-    transition: all var(--transition-fast);
-  }
-
-  .btn-secondary {
-    background: var(--bg-surface-elevated);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--border-strong);
-    background: #e5e7eb;
-  }
-
-  .btn-primary {
-    background: var(--primary);
-    border: 1px solid var(--primary);
-    color: #fff;
-    font-weight: 600;
-  }
-
-  .btn-primary:hover {
-    background: var(--primary-hover);
-  }
-
-  /* Panel Toggle Buttons */
-  .panel-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.8rem;
-    font-size: 0.825rem;
-    font-weight: 500;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .panel-toggle-btn:hover {
-    background: var(--bg-surface-elevated);
-    color: var(--text-primary);
-  }
-
-  .panel-toggle-btn.active {
-    background: var(--primary-surface);
-    color: var(--primary);
-    border-color: var(--primary-light);
-    font-weight: 600;
-  }
-
-  /* Workspace Layout */
-  .editor-workspace {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .editor-stage {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
-    background: var(--bg-surface);
-  }
-
-  /* Toolbar */
-  .editor-toolbar {
-    height: 42px;
-    background: var(--bg-surface-elevated);
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    padding: 0 1rem;
-    gap: 0.5rem;
-    overflow-x: auto;
-    flex-shrink: 0;
-  }
-
-  .toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 0.2rem;
-  }
-
-  .toolbar-divider {
-    width: 1px;
-    height: 18px;
-    background: var(--border-strong);
-    margin: 0 0.25rem;
-  }
-
-  .tool-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 28px;
-    height: 28px;
-    padding: 0 0.35rem;
-    border: none;
-    background: transparent;
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 0.825rem;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .tool-btn:hover {
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .tool-btn.image-btn {
-    gap: 0.35rem;
-    padding: 0 0.6rem;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    font-weight: 500;
-  }
-
-  .tool-btn.image-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-
-  /* CodeMirror Container */
-  .codemirror-container {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-  }
-
-  /* Drawer Panel (Right Side) */
-  .editor-drawer {
-    width: 360px;
-    background: var(--bg-primary);
-    border-left: 1px solid var(--border-subtle);
-    display: none;
-    flex-direction: column;
-    flex-shrink: 0;
-    overflow-y: auto;
-    z-index: 10;
-  }
-
-  .editor-drawer.open {
-    display: flex;
-  }
-
-  .drawer-header {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg-surface);
-    position: sticky;
-    top: 0;
-    z-index: 5;
-  }
-
-  .drawer-title-group {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .drawer-heading {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .drawer-badge {
-    font-size: 0.675rem;
-    font-weight: 600;
-    padding: 0.15rem 0.45rem;
-    background: var(--primary-surface);
-    color: var(--primary);
-    border-radius: var(--radius-full);
-  }
-
-  .drawer-close-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .drawer-close-btn:hover {
-    color: var(--text-primary);
-    background: var(--bg-surface-elevated);
-  }
-
-  /* Panels Content */
-  .panel-content {
-    display: none;
-    padding: 1.25rem;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  .panel-content.active {
-    display: flex;
-  }
-
-  /* Form Elements */
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .form-row {
-    display: flex;
-    gap: 0.75rem;
-  }
-
-  .flex-1 {
-    flex: 1;
-  }
-
-  .form-group label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  .form-control {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-sizing: border-box;
-    font-family: inherit;
-    transition: border-color var(--transition-fast);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px var(--primary-surface);
-  }
-
-  .slug-input-wrapper {
-    display: flex;
-    align-items: center;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--bg-surface);
-    overflow: hidden;
-  }
-
-  .slug-prefix {
-    padding: 0.5rem 0.6rem;
-    background: var(--bg-surface-elevated);
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-family: var(--font-mono);
-    border-right: 1px solid var(--border-subtle);
-  }
-
-  .form-control.slug-field {
-    border: none;
-    font-family: var(--font-mono);
-  }
-
-  .form-control.slug-field:focus {
-    box-shadow: none;
-  }
-
-  .field-hint {
-    font-size: 0.725rem;
-    color: var(--text-muted);
-  }
-
-  .field-hint code {
-    font-family: var(--font-mono);
-    background: var(--bg-surface-elevated);
-    padding: 0.1rem 0.3rem;
-    border-radius: 4px;
-  }
-
-  /* Blocks Panel Styles */
-  .blocks-intro p {
-    margin: 0;
-    font-size: 0.825rem;
-    color: var(--text-muted);
-    line-height: 1.45;
-  }
-
-  .block-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    transition: all var(--transition-fast);
-  }
-
-  .block-card:hover {
-    border-color: var(--primary-light);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .block-card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .block-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .block-icon.amazon {
-    background: #fff7ed;
-    color: #ea580c;
-  }
-
-  .block-icon.youtube {
-    background: #fef2f2;
-    color: #dc2626;
-  }
-
-  .block-icon.schema {
-    background: #f0fdf4;
-    color: #16a34a;
-  }
-
-  .block-icon.alert {
-    background: #eff6ff;
-    color: #2563eb;
-  }
-
-  .block-title {
-    margin: 0;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-  }
-
-  .block-desc {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-  }
-
-  .block-preview-code {
-    margin: 0;
-    font-size: 0.75rem;
-    font-family: var(--font-mono);
-    color: var(--text-secondary);
-    background: var(--bg-surface-elevated);
-    padding: 0.4rem 0.6rem;
-    border-radius: 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .btn-insert-block {
-    width: 100%;
-    padding: 0.45rem;
-    background: var(--bg-surface-elevated);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .btn-insert-block:hover {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-  }
-
-  .callout-insert-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
-  }
-
-  .btn-callout {
-    padding: 0.4rem 0.6rem;
-    background: var(--bg-surface-elevated);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    font-size: 0.775rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .btn-callout:hover {
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    border-color: var(--border-strong);
-  }
-</style>

@@ -13,8 +13,10 @@
     "astro": "astro",
     "check:images": "node scripts/check-image-sizes.mjs",
     "deploy": "astro build && wrangler deploy",
-    "seed:users": "node scripts/seed-users.mjs",
+    "seed": "node scripts/seed.mjs",
+    "seed:users": "node scripts/seed.mjs",
     "d1:migrate": "wrangler d1 migrations apply DB",
+    "db:generate": "drizzle-kit generate",
     "typecheck": "astro sync && tsc --noEmit"
   },
   "dependencies": {
@@ -26,8 +28,11 @@
     "astro": "^7.3.2",
     "astro-auto-import": "^0.6.0",
     "codemirror": "^6.0.2",
+    "drizzle-orm": "1.0.0-rc.4",
     "sharp": "^0.35.4",
-    "typescript": "^7.0.2"
+    "slugify": "^1.6.9",
+    "typescript": "^7.0.2",
+    "valibot": "^1.5.0"
   },
   "allowScripts": {
     "esbuild": true,
@@ -36,6 +41,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260916.1",
     "@types/node": "^22.20.3",
+    "drizzle-kit": "1.0.0-rc.4",
+    "drizzle-seed": "^0.3.1",
     "wrangler": "^4.132.0"
   }
 }

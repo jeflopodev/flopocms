@@ -1,8 +1,8 @@
 ---
 import { type CollectionEntry, render } from "astro:content";
-import BlogPost from "../../layouts/BlogPost.astro";
 import RootLayout from "#/layouts/root-layout.astro";
 import { getVisibleBlogArticles } from "../../utils/articles";
+import { getTemplateComponent } from "../../templates";
 
 export async function getStaticPaths() {
 	const posts = await getVisibleBlogArticles();
@@ -16,10 +16,11 @@ type Props = CollectionEntry<"blog">;
 const post = Astro.props;
 const { Content, remarkPluginFrontmatter } = await render(post);
 const jsonLd = remarkPluginFrontmatter?.jsonLd;
+const Template = getTemplateComponent(post.data.template);
 ---
 
-<RootLayout class="blog-post-shell" jsonLd={jsonLd} title={post.data.title} description={post.data.description}>
-	<BlogPost {...post.data}>
+<RootLayout hasMain={false} jsonLd={jsonLd} title={post.data.title} description={post.data.description}>
+	<Template {...post.data}>
 		<Content />
-	</BlogPost>
+	</Template>
 </RootLayout>
