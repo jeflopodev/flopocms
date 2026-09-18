@@ -115,6 +115,22 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
     min-width: 0;
   }
 
+  .template-two-columns .prose {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .template-two-columns .prose > * {
+    max-width: 100%;
+  }
+
+  .template-two-columns .prose > [data-stretch] {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+  }
+
   .post-sidebar {
     position: sticky;
     top: 2rem;

@@ -90,18 +90,18 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
-    padding: 2.5rem var(--page-padding, 1.5rem) 4rem;
+    padding: 2.5rem 0 4rem;
     box-sizing: border-box;
   }
 
   .article-container {
     width: 100%;
-    max-width: var(--content-width, 60rem);
     margin: 0 auto;
   }
 
   .article-nav {
     width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--content-width, 60rem));
     margin: 0 auto 2rem;
   }
 
@@ -122,6 +122,7 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 
   .article-header {
     width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--content-width, 60rem));
     margin: 0 auto 2.5rem;
   }
 
@@ -170,7 +171,7 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 
   .hero-image-wrapper {
     width: 100%;
-    max-width: var(--wide-width, 70rem);
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--wide-width, 70rem));
     margin: 2.5rem auto 3rem;
     border-radius: var(--radius-lg);
     overflow: hidden;
@@ -189,6 +190,7 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 
   .draft-banner {
     width: 100%;
+    max-width: min(calc(100% - 2 * var(--page-padding, 1.5rem)), var(--content-width, 60rem));
     margin: 0 auto 2rem;
     padding: 1rem 1.25rem;
     border-radius: var(--radius-md);
