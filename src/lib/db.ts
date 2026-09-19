@@ -32,8 +32,8 @@ let schemaMigrated = false;
 
 /**
  * Self-healing schema migration:
- * Automatically ensures post_locks table and all posts columns exist in Cloudflare D1.
- * Prevents runtime 500 errors if D1 migrations haven't run on remote yet.
+ * Automatically ensures all required tables and columns exist in Cloudflare D1.
+ * Prevents runtime errors if D1 migrations haven't run on remote yet.
  */
 export async function ensureSchema(locals?: App.Locals): Promise<void> {
   if (schemaMigrated) return;
@@ -53,22 +53,58 @@ export async function ensureSchema(locals?: App.Locals): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_post_locks_expires_at ON post_locks(expires_at);
     `);
 
-    // 2. Check existing columns in posts
+    // 2. Ensure all columns in posts table
     try {
-      const { results } = await d1.prepare("PRAGMA table_info(posts)").all<{ name: string }>();
-      const existingCols = new Set(results?.map((r) => r.name) || []);
+      const { results: postCols } = await d1.prepare("PRAGMA table_info(posts)").all<{ name: string }>();
+      const existingPostCols = new Set(postCols?.map((r) => r.name) || []);
 
-      if (!existingCols.has("git_branch")) {
-        await d1.exec("ALTER TABLE posts ADD COLUMN git_branch TEXT;");
-      }
-      if (!existingCols.has("pr_number")) {
-        await d1.exec("ALTER TABLE posts ADD COLUMN pr_number INTEGER;");
-      }
-      if (!existingCols.has("pr_url")) {
-        await d1.exec("ALTER TABLE posts ADD COLUMN pr_url TEXT;");
+      const missingPostColumns: Array<{ name: string; sql: string }> = [
+        { name: "template", sql: "ALTER TABLE posts ADD COLUMN template TEXT DEFAULT 'default';" },
+        { name: "default_width", sql: "ALTER TABLE posts ADD COLUMN default_width TEXT DEFAULT '60rem';" },
+        { name: "wide_width", sql: "ALTER TABLE posts ADD COLUMN wide_width TEXT DEFAULT '70rem';" },
+        { name: "git_branch", sql: "ALTER TABLE posts ADD COLUMN git_branch TEXT;" },
+        { name: "pr_number", sql: "ALTER TABLE posts ADD COLUMN pr_number INTEGER;" },
+        { name: "pr_url", sql: "ALTER TABLE posts ADD COLUMN pr_url TEXT;" },
+      ];
+
+      for (const col of missingPostColumns) {
+        if (!existingPostCols.has(col.name)) {
+          try {
+            await d1.exec(col.sql);
+          } catch (alterErr) {
+            console.warn(`ALTER TABLE posts ADD COLUMN ${col.name} warning:`, alterErr);
+          }
+        }
       }
     } catch (colErr) {
-      console.warn("Column migration warning:", colErr);
+      console.warn("Posts column migration warning:", colErr);
+    }
+
+    // 3. Ensure all columns in assets table
+    try {
+      const { results: assetCols } = await d1.prepare("PRAGMA table_info(assets)").all<{ name: string }>();
+      const existingAssetCols = new Set(assetCols?.map((r) => r.name) || []);
+
+      const missingAssetColumns: Array<{ name: string; sql: string }> = [
+        { name: "original_name", sql: "ALTER TABLE assets ADD COLUMN original_name TEXT DEFAULT '';" },
+        { name: "url", sql: "ALTER TABLE assets ADD COLUMN url TEXT DEFAULT '';" },
+        { name: "title", sql: "ALTER TABLE assets ADD COLUMN title TEXT DEFAULT '';" },
+        { name: "alt_text", sql: "ALTER TABLE assets ADD COLUMN alt_text TEXT DEFAULT '';" },
+        { name: "description", sql: "ALTER TABLE assets ADD COLUMN description TEXT DEFAULT '';" },
+        { name: "updated_at", sql: "ALTER TABLE assets ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP;" },
+      ];
+
+      for (const col of missingAssetColumns) {
+        if (!existingAssetCols.has(col.name)) {
+          try {
+            await d1.exec(col.sql);
+          } catch (alterErr) {
+            console.warn(`ALTER TABLE assets ADD COLUMN ${col.name} warning:`, alterErr);
+          }
+        }
+      }
+    } catch (assetColErr) {
+      console.warn("Assets column migration warning:", assetColErr);
     }
 
     schemaMigrated = true;
@@ -76,4 +112,5 @@ export async function ensureSchema(locals?: App.Locals): Promise<void> {
     console.warn("ensureSchema warning:", err);
   }
 }
+
 
