@@ -2,7 +2,7 @@
 export const prerender = false;
 
 import { eq, or } from "drizzle-orm";
-import { getDb, posts as postsTable } from "../../../../lib/db";
+import { getDb, posts as postsTable, ensureSchema } from "../../../../lib/db";
 import RootLayout from "#/layouts/root-layout.astro";
 import { getTemplateComponent } from "../../../../templates";
 import AmazonProduct from "#/blocks/amazon-product/component.astro";
@@ -16,11 +16,19 @@ if (!id) {
 }
 
 const db = getDb(Astro.locals);
-const [post] = await db
-  .select()
-  .from(postsTable)
-  .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
-  .limit(1);
+await ensureSchema(Astro.locals);
+
+let post: any;
+try {
+  const [found] = await db
+    .select()
+    .from(postsTable)
+    .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
+    .limit(1);
+  post = found;
+} catch (err) {
+  console.error("Failed to query post for preview:", err);
+}
 
 if (!post) {
   return Astro.redirect("/admin/posts");

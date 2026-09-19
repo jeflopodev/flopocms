@@ -1,9 +1,11 @@
 ---
 export const prerender = false;
 
-import { getDb, posts } from "../../../lib/db";
+import { getDb, posts, ensureSchema } from "../../../lib/db";
 
 const db = getDb(Astro.locals);
+await ensureSchema(Astro.locals);
+
 const user = Astro.locals.user || { username: "jeflopo" };
 
 const id = crypto.randomUUID();

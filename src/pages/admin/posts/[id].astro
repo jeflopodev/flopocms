@@ -2,8 +2,8 @@
 export const prerender = false;
 
 import { eq, or, desc } from "drizzle-orm";
-import { getDb, posts as postsTable, assets as assetsTable, type Post, type Asset } from "../../../lib/db";
-import { getLockStatus } from "../../../lib/locks";
+import { getDb, posts as postsTable, assets as assetsTable, ensureSchema, type Post, type Asset } from "../../../lib/db";
+import { getLockStatus, type LockResult } from "../../../lib/locks";
 import { templateOptions } from "../../../templates";
 import { blockDefinitions } from "../../../blocks";
 import "../../../styles/global.css";
@@ -15,18 +15,31 @@ if (!id) {
 }
 
 const db = getDb(Astro.locals);
-const [post] = await db
-  .select()
-  .from(postsTable)
-  .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
-  .limit(1);
+await ensureSchema(Astro.locals);
+
+let post: Post | undefined;
+try {
+  const [found] = await db
+    .select()
+    .from(postsTable)
+    .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
+    .limit(1);
+  post = found;
+} catch (err) {
+  console.error("Failed to query post by id/slug:", err);
+}
 
 if (!post) {
   return Astro.redirect("/admin/posts");
 }
 
 const user = Astro.locals.user || { id: "unknown", username: post.author || "jeflopo" };
-const initialLock = await getLockStatus(db, post.id, user.id);
+let initialLock: LockResult = { success: true, locked: false, isOwner: false };
+try {
+  initialLock = await getLockStatus(db, post.id, user.id);
+} catch (err) {
+  console.warn("Failed to get initial lock:", err);
+}
 
 let initialAssets: Asset[] = [];
 try {
@@ -47,7 +60,7 @@ try {
 }
 
 const rawPubDate = post.pubDate || (post as any).pub_date;
-const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toISOString().split("T")[0];
+const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Date().toISOString().split("T")[0];
 ---
 
 <!doctype html>

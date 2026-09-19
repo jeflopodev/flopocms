@@ -3,7 +3,7 @@ export const prerender = false;
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { eq, and, ne } from "drizzle-orm";
-import { getDb, posts } from "../../../../lib/db";
+import { getDb, posts, ensureSchema } from "../../../../lib/db";
 import { getLockStatus } from "../../../../lib/locks";
 import {
   ensureBranch,
@@ -41,6 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const db = getDb(locals);
+    await ensureSchema(locals);
     const body = (await request.json()) as SavePostPayload;
 
     const {
