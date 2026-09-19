@@ -1,0 +1,179 @@
+---
+export const prerender = false;
+
+import { eq, or } from "drizzle-orm";
+import { getDb, posts as postsTable } from "../../../../lib/db";
+import RootLayout from "#/layouts/root-layout.astro";
+import { getTemplateComponent } from "../../../../templates";
+import AmazonProduct from "#/blocks/amazon-product/component.astro";
+import YouTube from "#/blocks/youtube/component.astro";
+import Schema from "#/blocks/schema/component.astro";
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect("/admin/posts");
+}
+
+const db = getDb(Astro.locals);
+const [post] = await db
+  .select()
+  .from(postsTable)
+  .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
+  .limit(1);
+
+if (!post) {
+  return Astro.redirect("/admin/posts");
+}
+
+const Template = getTemplateComponent(post.template as any);
+
+const templateProps = {
+  title: post.title,
+  description: post.description || "",
+  pubDate: new Date(post.pubDate || post.createdAt),
+  heroImage: post.featuredImage || undefined,
+  draft: true,
+  author: post.author as any,
+  defaultWidth: post.defaultWidth || "60rem",
+  wideWidth: post.wideWidth || "70rem",
+};
+
+/**
+ * Basic parser to render markdown + components for live preview
+ */
+function renderPreviewMarkdown(content: string) {
+  // Convert markdown to HTML lines
+  let html = content;
+
+  // Simple block transforms
+  html = html
+    .replace(/^### (.*$)/gim, '<h3 class="preview-h3">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 class="preview-h2">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 class="preview-h1">$1</h1>')
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    .replace(/~~(.*?)~~/gim, '<del>$1</del>')
+    .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img alt="$1" src="$2" class="preview-img" loading="lazy" />')
+    .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/^\> (.*$)/gim, '<blockquote class="preview-quote">$1</blockquote>')
+    .replace(/\n\n/gim, '</p><p>')
+    .replace(/\n/gim, '<br />');
+
+  return `<p>${html}</p>`;
+}
+
+const renderedHtml = renderPreviewMarkdown(post.contentMdx || "");
+---
+
+<RootLayout hasMain={false} title={`[Preview] ${post.title}`} description={post.description}>
+  <!-- Preview Control Bar -->
+  <div class="live-preview-bar">
+    <div class="preview-bar-info">
+      <span class="preview-badge">Live Draft Preview</span>
+      <span class="preview-title">{post.title}</span>
+      <span class="preview-slug"><code>/blog/{post.slug}</code></span>
+    </div>
+    <div class="preview-bar-actions">
+      <a href={`/admin/posts/${post.id}`} class="btn-preview-back">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Back to Editor
+      </a>
+    </div>
+  </div>
+
+  <div class="preview-content-wrapper">
+    <Template {...templateProps}>
+      <div class="preview-rendered-body" set:html={renderedHtml} />
+    </Template>
+  </div>
+</RootLayout>
+
+<style>
+  .live-preview-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 1.5rem;
+    background: #0f172a;
+    border-bottom: 2px solid #38bdf8;
+    color: #f8fafc;
+    font-family: var(--font-sans, system-ui, sans-serif);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .preview-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+  }
+
+  .preview-badge {
+    background: #0284c7;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+  }
+
+  .preview-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #e2e8f0;
+  }
+
+  .preview-slug code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #38bdf8;
+  }
+
+  .btn-preview-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s ease;
+  }
+
+  .btn-preview-back:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+  }
+
+  .preview-content-wrapper {
+    min-height: 100vh;
+  }
+
+  :global(.preview-img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+  }
+
+  :global(.preview-quote) {
+    border-left: 4px solid #38bdf8;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: #94a3b8;
+    font-style: italic;
+  }
+</style>

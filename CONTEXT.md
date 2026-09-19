@@ -59,3 +59,19 @@ _Avoid_: Bleed element, wide block
 **Schema Extractor**:
 A Sätteri AST plugin that parses embedded MDX component props at build time to synthesize a unified JSON-LD `@graph`.
 _Avoid_: Schema generator, LD parser
+
+**Content Branch / Editorial Branch**:
+An isolated Git branch (`content/<slug>`) created per article during drafting, associated with an automated Pull Request against `main`.
+_Avoid_: Working copy, temp branch
+
+**Automated PR Merge**:
+The automated publishing transition where marking an article as `Published` commits with `draft: false`, merges the open PR into `main` via the GitHub API, and cleans up the remote content branch.
+_Avoid_: Manual merge, direct push
+
+**Concurrency Lock**:
+A pessimistic lock record in D1 (`post_locks`) that grants exclusive edit rights to an active editor, refreshed via heartbeats and immediately released upon closing or navigating away.
+_Avoid_: Mutex, file lock
+
+**Live Draft Preview**:
+The real-time preview route (`/admin/posts/[id]/preview`) rendered on-demand in Cloudflare Workers using D1 post state, the designated template, and stretch CSS variables without waiting for CI builds.
+_Avoid_: Build preview, staged site

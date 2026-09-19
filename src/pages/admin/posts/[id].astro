@@ -1,8 +1,9 @@
 ---
 export const prerender = false;
 
-import { eq, desc } from "drizzle-orm";
+import { eq, or, desc } from "drizzle-orm";
 import { getDb, posts as postsTable, assets as assetsTable, type Post, type Asset } from "../../../lib/db";
+import { getLockStatus } from "../../../lib/locks";
 import { templateOptions } from "../../../templates";
 import { blockDefinitions } from "../../../blocks";
 import "../../../styles/global.css";
@@ -17,12 +18,15 @@ const db = getDb(Astro.locals);
 const [post] = await db
   .select()
   .from(postsTable)
-  .where(eq(postsTable.id, id))
+  .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
   .limit(1);
 
 if (!post) {
   return Astro.redirect("/admin/posts");
 }
+
+const user = Astro.locals.user || { id: "unknown", username: post.author || "jeflopo" };
+const initialLock = await getLockStatus(db, post.id, user.id);
 
 let initialAssets: Asset[] = [];
 try {
@@ -30,8 +34,6 @@ try {
 } catch (err) {
   console.error("Failed to query assets:", err);
 }
-
-const user = Astro.locals.user || { username: post.author || "jeflopo" };
 
 // Parse tags
 let parsedTags: string[] = [];
@@ -91,27 +93,43 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       </div>
 
       <div class="topbar-right">
-        <button type="button" id="manual-save-btn" class="btn btn-secondary" title="Save changes now">
+        <!-- Unified Status Selector -->
+        <div class="topbar-status-wrap" title="Article Publication Status">
+          <select id="topbar-status-select" class="topbar-status-select" disabled={initialLock.locked}>
+            <option value="draft" selected={post.status === "draft"}>Draft</option>
+            <option value="published" selected={post.status === "published"}>Published</option>
+          </select>
+        </div>
+
+        <!-- Single Unified Save Button -->
+        <button
+          type="button"
+          id="manual-save-btn"
+          class="btn btn-primary action-save-btn"
+          title="Save changes (auto-syncs to Git & D1)"
+          disabled={initialLock.locked}
+        >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
             <polyline points="17 21 17 13 7 13 7 21"/>
             <polyline points="7 3 7 8 15 8"/>
           </svg>
-          Save
+          <span id="save-btn-text">Save</span>
         </button>
 
+        <!-- Dynamic Live/Draft Preview Link -->
         <a
-          href={`/blog/${post.slug}`}
+          href={post.status === "published" ? `/blog/${post.slug}` : `/admin/posts/${post.id}/preview`}
           target="_blank"
           id="preview-link"
           class="btn btn-secondary"
-          title="Preview live article"
+          title={post.status === "published" ? "View live published article" : "Preview draft with live styles"}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
-          Preview
+          <span id="preview-link-text">{post.status === "published" ? "View Live" : "Preview Draft"}</span>
         </a>
 
         <div class="topbar-divider"></div>
@@ -144,16 +162,23 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
           </svg>
           <span>Blocks</span>
         </button>
-
-        <button type="button" id="publish-btn" class="btn btn-primary" title="Publish to GitHub main branch">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
-          Publish
-        </button>
       </div>
     </header>
+
+    <!-- Concurrency Lock Warning Banner -->
+    <div id="lock-warning-banner" class:list={["lock-warning-banner", { hidden: !initialLock.locked }]}>
+      <div class="lock-banner-inner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span id="lock-warning-text">
+          {initialLock.locked
+            ? `This article is currently being edited by @${initialLock.lock?.username || "another editor"}. Read-Only Mode enabled.`
+            : ""}
+        </span>
+      </div>
+    </div>
 
     <!-- Workspace Viewport -->
     <main class="editor-workspace">
@@ -644,6 +669,8 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       default_width: post.defaultWidth || (post as any).default_width || "60rem",
       wide_width: post.wideWidth || (post as any).wide_width || "70rem",
       pub_date: post.pubDate || (post as any).pub_date || "",
+      isInitiallyLocked: initialLock.locked,
+      lockUser: initialLock.lock?.username || "",
     })} />
 
     <script id="initial-assets-data" type="application/json" set:html={JSON.stringify(initialAssets)} />
@@ -664,6 +691,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       // DOM Elements
       const container = document.getElementById("codemirror-container");
       const topbarTitleInput = document.getElementById("topbar-title-input") as HTMLInputElement;
+      const topbarStatusSelect = document.getElementById("topbar-status-select") as HTMLSelectElement;
       const postTitleField = document.getElementById("post-title-field") as HTMLInputElement;
       const postSlugField = document.getElementById("post-slug-field") as HTMLInputElement;
       const resyncSlugBtn = document.getElementById("resync-slug-btn");
@@ -680,8 +708,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       const browseHeroImageBtn = document.getElementById("browse-hero-image-btn");
       const saveIndicator = document.getElementById("save-indicator");
       const saveIndicatorText = saveIndicator?.querySelector(".indicator-text");
-      const manualSaveBtn = document.getElementById("manual-save-btn");
-      const publishBtn = document.getElementById("publish-btn");
+      const manualSaveBtn = document.getElementById("manual-save-btn") as HTMLButtonElement;
       const previewLink = document.getElementById("preview-link") as HTMLAnchorElement;
       const statusBadge = document.getElementById("post-status-badge");
 
@@ -700,6 +727,8 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       let isDirty = false;
       let autoSaveTimer: any = null;
       let isSlugManuallyEdited = false;
+      let isReadOnly = Boolean(postData.isInitiallyLocked);
+      let heartbeatTimer: any = null;
 
       // Initialize CodeMirror 6
       const themeConfig = EditorView.theme({
@@ -743,9 +772,10 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
           basicSetup,
           markdown(),
           EditorView.lineWrapping,
+          EditorView.editable.of(!isReadOnly),
           themeConfig,
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
+            if (update.docChanged && !isReadOnly) {
               markDirty();
             }
           }),
@@ -1112,7 +1142,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
 
           let thumb = "";
           if (a.mimeType.startsWith("image/")) {
-            thumb = `<img src="${a.url}" alt="${a.filename}" loading="lazy" />`;
+            thumb = `<img src="${a.url}" alt="${a.filename}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'file-icon-badge\\'><span>IMG</span></div>';" />`;
           } else {
             thumb = `
               <div class="file-icon-badge">
@@ -1225,14 +1255,20 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
               updatedAt: new Date().toISOString(),
             };
             allAssets.unshift(newAsset);
-            pickedAsset = newAsset;
-            if (modalUploadStatus) modalUploadStatus.textContent = "Upload successful!";
-            switchModalTab("library");
-            renderModalAssets();
-            if (confirmAssetModalBtn) confirmAssetModalBtn.disabled = false;
-            if (selectedAssetInfo) {
-              selectedAssetInfo.innerHTML = `<strong>Selected:</strong> <span>${newAsset.filename}</span>`;
+
+            // Direct insertion without broken preview
+            if (pickerTarget === "featured") {
+              postImageField.value = data.url;
+              markDirty();
+            } else {
+              insertSnippet(`\n${data.snippet || `![${data.filename}](${data.url})`}\n`);
             }
+
+            if (modalUploadStatus) modalUploadStatus.textContent = "Upload successful & inserted!";
+            setTimeout(() => {
+              assetModal.close();
+              if (modalUploadStatus) modalUploadStatus.textContent = "";
+            }, 500);
           } else {
             alert(data.error || "Upload failed");
             if (modalUploadStatus) modalUploadStatus.textContent = "";
@@ -1243,8 +1279,41 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
         }
       }
 
+      // Preview link helper
+      function updatePreviewLink(status?: string, slug?: string) {
+        if (!previewLink) return;
+        const currentStatus = status || topbarStatusSelect?.value || postStatusSelect?.value || "draft";
+        const currentSlug = slug || postSlugField?.value.trim() || postData.slug;
+        const previewText = document.getElementById("preview-link-text");
+
+        if (currentStatus === "published") {
+          previewLink.href = `/blog/${currentSlug}`;
+          previewLink.title = "View published article live";
+          if (previewText) previewText.textContent = "View Live";
+        } else {
+          previewLink.href = `/admin/posts/${postData.id}/preview`;
+          previewLink.title = "Preview draft with live styles";
+          if (previewText) previewText.textContent = "Preview Draft";
+        }
+      }
+
+      function syncStatus(newStatus: string) {
+        if (topbarStatusSelect) topbarStatusSelect.value = newStatus;
+        if (postStatusSelect) postStatusSelect.value = newStatus;
+        if (statusBadge) {
+          statusBadge.className = `status-tag ${newStatus}`;
+          statusBadge.textContent = newStatus === "published" ? "Published" : "Draft";
+        }
+        updatePreviewLink(newStatus);
+        markDirty();
+      }
+
+      topbarStatusSelect?.addEventListener("change", () => syncStatus(topbarStatusSelect.value));
+      postStatusSelect?.addEventListener("change", () => syncStatus(postStatusSelect.value));
+
       // Save logic
       function markDirty() {
+        if (isReadOnly) return;
         isDirty = true;
         if (saveIndicator) {
           saveIndicator.className = "save-indicator unsaved";
@@ -1257,14 +1326,15 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
       }
 
       async function savePost() {
-        if (isSaving) return;
+        if (isSaving || isReadOnly) return;
         isSaving = true;
 
         if (saveIndicator) {
           saveIndicator.className = "save-indicator saving";
-          if (saveIndicatorText) saveIndicatorText.textContent = "Saving to D1...";
+          if (saveIndicatorText) saveIndicatorText.textContent = "Saving to D1 & Git...";
         }
 
+        const currentStatus = topbarStatusSelect?.value || postStatusSelect?.value || "draft";
         const tagsRaw = postTagsField?.value || "";
         const tagsArray = tagsRaw
           .split(",")
@@ -1281,7 +1351,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
           author: postAuthorField.value,
           featured_image: postImageField.value.trim(),
           content_mdx: editorView.state.doc.toString(),
-          status: postStatusSelect.value,
+          status: currentStatus,
           template: postTemplateSelect.value || "default",
           default_width: postDefaultWidthField?.value.trim() || "60rem",
           wide_width: postWideWidthField?.value.trim() || "70rem",
@@ -1300,16 +1370,22 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
             isDirty = false;
             if (saveIndicator) {
               saveIndicator.className = "save-indicator saved";
-              if (saveIndicatorText) saveIndicatorText.textContent = "Saved to D1";
+              if (saveIndicatorText) {
+                saveIndicatorText.textContent = data.merged ? "Published & Merged" : "Saved to D1 & Git";
+              }
             }
             if (statusBadge) {
               statusBadge.className = `status-tag ${payload.status}`;
               statusBadge.textContent = payload.status === "published" ? "Published" : "Draft";
             }
+            updatePreviewLink(payload.status, data.slug || payload.slug);
           } else {
             if (saveIndicator) {
               saveIndicator.className = "save-indicator error";
               if (saveIndicatorText) saveIndicatorText.textContent = data.error || "Save error";
+            }
+            if (res.status === 423) {
+              setReadOnlyMode(data.error);
             }
           }
         } catch {
@@ -1327,39 +1403,57 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
         savePost();
       });
 
-      // Publish logic
-      publishBtn?.addEventListener("click", async () => {
-        if (isDirty) {
-          await savePost();
+      // Concurrency Lock Lifecycle
+      function setReadOnlyMode(lockedBy: string) {
+        isReadOnly = true;
+        const banner = document.getElementById("lock-warning-banner");
+        const bannerText = document.getElementById("lock-warning-text");
+        if (banner) banner.classList.remove("hidden");
+        if (bannerText) {
+          bannerText.textContent = `Article is currently being edited by @${lockedBy}. You are in Read-Only mode.`;
         }
+        if (manualSaveBtn) manualSaveBtn.disabled = true;
+        if (topbarStatusSelect) topbarStatusSelect.disabled = true;
+        if (topbarTitleInput) topbarTitleInput.disabled = true;
+        if (postStatusSelect) postStatusSelect.disabled = true;
+      }
 
-        const origHtml = publishBtn.innerHTML;
-        publishBtn.innerHTML = `<span>Publishing...</span>`;
-
-        try {
-          const res = await fetch("/api/admin/posts/publish", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: postData.id }),
-          });
-
-          const data = await res.json();
-          if (data.success) {
-            postStatusSelect.value = "published";
-            if (statusBadge) {
-              statusBadge.className = "status-tag published";
-              statusBadge.textContent = "Published";
-            }
-            alert(data.message || "Published successfully!");
-          } else {
-            alert(`Publishing failed: ${data.error}`);
+      function startLockHeartbeat() {
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        heartbeatTimer = setInterval(async () => {
+          if (isReadOnly) return;
+          try {
+            await fetch("/api/admin/posts/lock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ postId: postData.id, action: "renew" }),
+            });
+          } catch (err) {
+            console.warn("Lock heartbeat error:", err);
           }
-        } catch {
-          alert("Error publishing article");
-        } finally {
-          publishBtn.innerHTML = origHtml;
+        }, 20000);
+      }
+
+      function releaseLockImmediately() {
+        if (isReadOnly) return;
+        const releaseUrl = `/api/admin/posts/lock?postId=${encodeURIComponent(postData.id)}&action=release`;
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(releaseUrl);
+        } else {
+          fetch(releaseUrl, { method: "POST", keepalive: true }).catch(() => {});
         }
-      });
+      }
+
+      window.addEventListener("pagehide", releaseLockImmediately);
+      window.addEventListener("beforeunload", releaseLockImmediately);
+      document.querySelector(".back-link")?.addEventListener("click", releaseLockImmediately);
+
+      // Initialize Lock state on load
+      if (postData.isInitiallyLocked) {
+        setReadOnlyMode(postData.lockUser || "another editor");
+      } else {
+        startLockHeartbeat();
+      }
     </script>
 
     <style>
@@ -1385,6 +1479,53 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
         padding: 0 1.25rem;
         flex-shrink: 0;
         z-index: 20;
+      }
+
+      .lock-warning-banner {
+        background: rgba(239, 68, 68, 0.12);
+        border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+        color: #f87171;
+        padding: 0.5rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        z-index: 18;
+      }
+
+      .lock-warning-banner.hidden {
+        display: none !important;
+      }
+
+      .lock-banner-inner {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+      }
+
+      .topbar-status-wrap {
+        display: flex;
+        align-items: center;
+      }
+
+      .topbar-status-select {
+        height: 32px;
+        padding: 0 0.65rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        cursor: pointer;
+        outline: none;
+        transition: border-color var(--transition-fast);
+      }
+
+      .topbar-status-select:focus {
+        border-color: var(--primary);
       }
 
       .topbar-left, .topbar-right, .topbar-center {
@@ -1863,6 +2004,9 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
 
       /* Asset Picker Dialog Modal */
       .editor-asset-dialog {
+        position: fixed;
+        inset: 0;
+        margin: auto;
         border: none;
         border-radius: var(--radius-xl);
         padding: 0;
@@ -1870,6 +2014,7 @@ const pubDateFormatted = rawPubDate ? rawPubDate.split("T")[0] : new Date().toIS
         color: var(--text-primary);
         max-width: 780px;
         width: 90vw;
+        max-height: 85vh;
         box-shadow: var(--shadow-2xl);
       }
 

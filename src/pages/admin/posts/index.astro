@@ -148,7 +148,12 @@ if (posts.length === 0) {
                         </svg>
                       </button>
 
-                      <a href={`/blog/${post.slug}`} target="_blank" class="action-icon-btn view" title="View Post">
+                      <a
+                        href={post.status === "published" ? `/blog/${post.slug}` : `/admin/posts/${post.id}/preview`}
+                        target="_blank"
+                        class="action-icon-btn view"
+                        title={post.status === "published" ? "View Post" : "Preview Draft"}
+                      >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                           <circle cx="12" cy="12" r="3"/>

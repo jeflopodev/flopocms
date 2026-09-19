@@ -43,6 +43,9 @@ export const posts = sqliteTable(
     defaultWidth: text("default_width").default("60rem").notNull(),
     wideWidth: text("wide_width").default("70rem").notNull(),
     pubDate: text("pub_date").default(sql`CURRENT_TIMESTAMP`).notNull(),
+    gitBranch: text("git_branch"),
+    prNumber: integer("pr_number"),
+    prUrl: text("pr_url"),
     createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
     updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   },
@@ -50,6 +53,25 @@ export const posts = sqliteTable(
     uniqueIndex("idx_posts_slug").on(table.slug),
     index("idx_posts_status").on(table.status),
     index("idx_posts_updated_at").on(table.updatedAt),
+  ]
+);
+
+export const postLocks = sqliteTable(
+  "post_locks",
+  {
+    postId: text("post_id")
+      .primaryKey()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    username: text("username").notNull(),
+    acquiredAt: text("acquired_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    index("idx_post_locks_user_id").on(table.userId),
+    index("idx_post_locks_expires_at").on(table.expiresAt),
   ]
 );
 
@@ -82,6 +104,9 @@ export type NewSession = typeof sessions.$inferInsert;
 
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
+
+export type PostLock = typeof postLocks.$inferSelect;
+export type NewPostLock = typeof postLocks.$inferInsert;
 
 export type Asset = typeof assets.$inferSelect;
 export type NewAsset = typeof assets.$inferInsert;
