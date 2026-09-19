@@ -45,8 +45,16 @@ Custom components (`AmazonProduct`, `YouTube`, `Schema`) auto-imported globally 
 _Avoid_: Local imports, component scripts
 
 **Asset Registry**:
-A D1 database table (`assets`) tracking uploaded media assets, variants, and post/article associations alongside their co-located Git bundle paths.
+A D1 database table (`assets`) and module tracking uploaded media assets, variants, metadata, and post/article associations alongside their central public upload paths (`public/uploads/`).
 _Avoid_: Media library, file table
+
+**Media Storage**:
+The storage module that persists raw media asset bytes to their target environment (GitHub REST API under `public/uploads/` on production Workers, or local filesystem in development) behind a unified interface.
+_Avoid_: File driver, S3 adapter
+
+**Post Lifecycle**:
+The domain module coordinating article validation, Concurrency Lock verification, MDX frontmatter serialization, Git Sync Publisher branch/PR transitions, and Cloudflare D1 persistence.
+_Avoid_: Post service, article manager
 
 **Git Sync Publisher**:
 The Cloudflare Worker backend service that pushes D1 post state and assets to GitHub via the GitHub REST API upon publication, triggering static build.
