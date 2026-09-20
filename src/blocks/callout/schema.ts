@@ -11,6 +11,7 @@ export const CalloutVariantSchema = v.picklist([
 export const calloutSchema = v.object({
   variant: v.optional(CalloutVariantSchema, "note"),
   title: v.optional(v.string()),
+  stretch: v.optional(v.string(), "default"),
   class: v.optional(v.string()),
 });
 

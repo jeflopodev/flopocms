@@ -1,18 +1,21 @@
-import { amazonProductBlock } from "./amazon-product";
-import { youtubeBlock } from "./youtube";
-import { schemaBlock } from "./schema";
-import { calloutBlock } from "./callout";
-import { listBlock } from "./list";
-import { relatedPostsBlock } from "./related-posts";
+export * from "./types";
+export * from "./registry";
 
-export const blockDefinitions = [
-  amazonProductBlock,
-  youtubeBlock,
-  calloutBlock,
-  listBlock,
-  relatedPostsBlock,
-  schemaBlock,
-] as const;
+export * from "./paragraph";
+export * from "./heading";
+export * from "./callout";
+export * from "./youtube";
+export * from "./amazon-product";
+export * from "./list";
+export * from "./quote";
+export * from "./code";
+export * from "./related-posts";
+export * from "./schema";
+export * from "./image";
+
+import { getAllBlocks } from "./registry";
+
+export const blockDefinitions = getAllBlocks();
 
 export const blockImports = [
   {
@@ -26,9 +29,3 @@ export const blockImports = [
   },
 ];
 
-export * from "./amazon-product";
-export * from "./youtube";
-export * from "./schema";
-export * from "./callout";
-export * from "./list";
-export * from "./related-posts";

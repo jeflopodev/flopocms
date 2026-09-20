@@ -117,48 +117,48 @@ export function initEditor(data: EditorInitData): void {
     switch (tool) {
       case "bold":
         if (hasSelection) {
-          insertText = `**${selectedText}**\n`;
+          insertText = `<Bold>${selectedText}</Bold>`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = `****`;
-          newAnchor = selection.from + 2;
+          insertText = `<Bold></Bold>`;
+          newAnchor = selection.from + 6;
           newHead = newAnchor;
         }
         break;
 
       case "italic":
         if (hasSelection) {
-          insertText = `*${selectedText}*\n`;
+          insertText = `<Italic>${selectedText}</Italic>`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = `**`;
-          newAnchor = selection.from + 1;
+          insertText = `<Italic></Italic>`;
+          newAnchor = selection.from + 8;
           newHead = newAnchor;
         }
         break;
 
       case "strike":
         if (hasSelection) {
-          insertText = `~~${selectedText}~~\n`;
+          insertText = `<Strike>${selectedText}</Strike>`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = `~~~~`;
-          newAnchor = selection.from + 2;
+          insertText = `<Strike></Strike>`;
+          newAnchor = selection.from + 8;
           newHead = newAnchor;
         }
         break;
 
       case "link":
         if (hasSelection) {
-          insertText = `[${selectedText}]()\n`;
-          newAnchor = selection.from + insertText.length;
+          insertText = `<Link href="https://">${selectedText}</Link>`;
+          newAnchor = selection.from + 13;
           newHead = newAnchor;
         } else {
-          insertText = `[]()`;
-          newAnchor = selection.from + 1;
+          insertText = `<Link href="https://">link text</Link>`;
+          newAnchor = selection.from + 13;
           newHead = newAnchor;
         }
         break;
@@ -170,14 +170,13 @@ export function initEditor(data: EditorInitData): void {
       case "h5":
       case "h6": {
         const level = parseInt(tool.replace("h", ""), 10);
-        const prefix = "#".repeat(level) + " ";
         if (hasSelection) {
-          insertText = `${prefix}${selectedText}\n`;
+          insertText = `\n<Heading level={${level}}>${selectedText}</Heading>\n`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = prefix;
-          newAnchor = selection.from + prefix.length;
+          insertText = `\n<Heading level={${level}}>Heading Title</Heading>\n`;
+          newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         }
         break;
@@ -185,46 +184,46 @@ export function initEditor(data: EditorInitData): void {
 
       case "quote":
         if (hasSelection) {
-          insertText = `> ${selectedText}\n`;
+          insertText = `\n<Quote>\n  <Paragraph>${selectedText}</Paragraph>\n</Quote>\n`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = `> `;
-          newAnchor = selection.from + 2;
+          insertText = `\n<Quote>\n  <Paragraph>Quote text</Paragraph>\n</Quote>\n`;
+          newAnchor = selection.from + 22;
           newHead = newAnchor;
         }
         break;
 
       case "code":
         if (hasSelection) {
-          insertText = `\`\`\`\n${selectedText}\n\`\`\`\n`;
+          insertText = `\n<CodeBlock lang="typescript">\n  ${selectedText}\n</CodeBlock>\n`;
           newAnchor = selection.from + insertText.length;
           newHead = newAnchor;
         } else {
-          insertText = `\`\`\`\n\n\`\`\``;
-          newAnchor = selection.from + 4;
+          insertText = `\n<CodeBlock lang="typescript">\n  // Code here\n</CodeBlock>\n`;
+          newAnchor = selection.from + 33;
           newHead = newAnchor;
         }
         break;
 
       case "bullet":
         if (hasSelection) {
-          insertText = `- ${selectedText}\n`;
+          insertText = `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>${selectedText}</Paragraph>\n  </ListItem>\n</List>\n`;
           newAnchor = selection.from + insertText.length;
         } else {
-          insertText = `- `;
-          newAnchor = selection.from + 2;
+          insertText = `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>First point</Paragraph>\n  </ListItem>\n</List>\n`;
+          newAnchor = selection.from + insertText.length;
         }
         newHead = newAnchor;
         break;
 
       case "numbered":
         if (hasSelection) {
-          insertText = `1. ${selectedText}\n`;
+          insertText = `\n<List type="ordered">\n  <ListItem>\n    <Paragraph>${selectedText}</Paragraph>\n  </ListItem>\n</List>\n`;
           newAnchor = selection.from + insertText.length;
         } else {
-          insertText = `1. `;
-          newAnchor = selection.from + 3;
+          insertText = `\n<List type="ordered">\n  <ListItem>\n    <Paragraph>Step 1</Paragraph>\n  </ListItem>\n</List>\n`;
+          newAnchor = selection.from + insertText.length;
         }
         newHead = newAnchor;
         break;

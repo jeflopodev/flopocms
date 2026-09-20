@@ -1,5 +1,17 @@
 import * as v from "valibot";
 
+export const listSchema = v.object({
+  type: v.optional(v.picklist(["unordered", "ordered"]), "unordered"),
+  listStyle: v.optional(v.string()),
+  start: v.optional(v.union([v.number(), v.string()])),
+});
+
+export type ListProps = v.InferOutput<typeof listSchema>;
+
+export const listItemSchema = v.object({});
+
+export type ListItemProps = v.InferOutput<typeof listItemSchema>;
+
 export const ListStyleTypeSchema = v.string();
 
 export const ulSchema = v.object({
@@ -28,3 +40,4 @@ export function normalizeListStyleType(type?: string): string {
   if (t === "alpha") return "lower-alpha";
   return t;
 }
+

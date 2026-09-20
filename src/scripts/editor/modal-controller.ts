@@ -104,7 +104,7 @@ export class ModalController {
         const type = target.dataset.insert;
         if (type === "amazon") {
           this.insertSnippet(
-            `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="/uploads/product.webp"\n/>\n`
+            `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="/uploads/product.webp"\n  ctaText="Buy on Amazon"\n/>\n`
           );
         } else if (type === "youtube") {
           this.insertSnippet(
@@ -112,7 +112,7 @@ export class ModalController {
           );
         } else if (type === "list") {
           this.insertSnippet(
-            `\n<Ul list-style-type="disc">\n  <li>First key takeaway</li>\n  <Ol list-style-type="roman">\n    <li>Nested roman detail 1</li>\n    <li>Nested roman detail 2</li>\n  </Ol>\n  <li>Second key takeaway</li>\n</Ul>\n`
+            `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>First key takeaway</Paragraph>\n  </ListItem>\n  <ListItem>\n    <Paragraph>Second key takeaway</Paragraph>\n  </ListItem>\n</List>\n`
           );
         } else if (type === "related") {
           this.insertSnippet(
@@ -120,7 +120,7 @@ export class ModalController {
           );
         } else if (type === "schema") {
           this.insertSnippet(
-            `\n<Schema type="FAQPage">\n  {JSON.stringify({\n    "@context": "https://schema.org",\n    "@type": "FAQPage",\n    "mainEntity": [\n      {\n        "@type": "Question",\n        "name": "What is Astro?",\n        "acceptedAnswer": {\n          "@type": "Answer",\n          "text": "Astro is the web framework for content-driven websites."\n        }\n      }\n    ]\n  })}\n</Schema>\n`
+            `\n<Schema type="FAQPage" data={{\n  "@type": "FAQPage",\n  "mainEntity": [\n    {\n      "@type": "Question",\n      "name": "What is Astro?",\n      "acceptedAnswer": {\n        "@type": "Answer",\n        "text": "Astro is the web framework for content-driven websites."\n      }\n    }\n  ]\n}} />\n`
           );
         }
       });
@@ -129,7 +129,7 @@ export class ModalController {
     document.querySelectorAll(".btn-callout").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const variant = (e.currentTarget as HTMLElement).dataset.callout || "note";
-        this.insertSnippet(`\n<Callout variant="${variant}">\n  Enter callout explanation here.\n</Callout>\n`);
+        this.insertSnippet(`\n<Callout variant="${variant}">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>\n`);
       });
     });
   }
@@ -157,9 +157,9 @@ export class ModalController {
         this.onAssetPickedForHero(this.pickedAsset.url);
       } else {
         if (this.pickedAsset.mimeType.startsWith("image/")) {
-          this.insertSnippet(`\n![${this.pickedAsset.altText || this.pickedAsset.filename}](${this.pickedAsset.url})\n`);
+          this.insertSnippet(`\n<Image src="${this.pickedAsset.url}" alt="${this.pickedAsset.altText || this.pickedAsset.filename}" stretch="default" />\n`);
         } else {
-          this.insertSnippet(`\n<a href="${this.pickedAsset.url}" download="${this.pickedAsset.filename}">${this.pickedAsset.title || this.pickedAsset.filename}</a>\n`);
+          this.insertSnippet(`\n<Link href="${this.pickedAsset.url}">${this.pickedAsset.title || this.pickedAsset.filename}</Link>\n`);
         }
       }
       this.assetModal.close();

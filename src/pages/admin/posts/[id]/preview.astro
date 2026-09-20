@@ -5,6 +5,7 @@ import { eq, or } from "drizzle-orm";
 import { getDb, posts as postsTable } from "../../../../lib/db";
 import RootLayout from "#/layouts/root-layout.astro";
 import { getTemplateComponent } from "../../../../templates";
+import { renderDocument } from "../../../../blocks/dsl";
 
 const { id } = Astro.params;
 
@@ -43,189 +44,20 @@ const templateProps = {
   wideWidth: post.wideWidth || "70rem",
 };
 
-/**
- * Rich parser to render markdown + custom MDX components (<Callout>, <YouTube>, etc.) for live draft preview
- */
-function renderPreviewMarkdown(content: string): string {
-  if (!content) return "";
-
-  let html = content;
-
-  // 1. Strip Frontmatter if present
-  html = html.replace(/^---[\s\S]*?---\s*/, "");
-
-  // 2. Custom Block: <YouTube id="..." title="..." stretch="..." />
-  html = html.replace(
-    /<YouTube\b([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/YouTube>)/gi,
-    (_match, attrs) => {
-      const idMatch = attrs.match(/id=["']([^"']+)["']/i);
-      const id = idMatch ? idMatch[1] : "";
-      const titleMatch = attrs.match(/title=["']([^"']+)["']/i);
-      const title = titleMatch ? titleMatch[1] : "YouTube video player";
-      const stretchMatch = attrs.match(/stretch=["']([^"']+)["']/i);
-      const stretch = stretchMatch ? stretchMatch[1] : "default";
-
-      if (!id) return "";
-
-      return `\n\n<div class="youtube-container" data-stretch="${stretch}">
-        <iframe
-          src="https://www.youtube-nocookie.com/embed/${id}"
-          title="${title}"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-          loading="lazy"
-        ></iframe>
-      </div>\n\n`;
-    }
-  );
-
-  // 3. Custom Block: <Callout variant="..." title="..." stretch="...">...</Callout>
-  const defaultTitles: Record<string, string> = {
-    note: "Note",
-    tip: "Tip",
-    important: "Important",
-    warning: "Warning",
-    caution: "Caution",
-  };
-
-  const icons: Record<string, string> = {
-    note: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
-    tip: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
-    important: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-    warning: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-    caution: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-  };
-
-  html = html.replace(
-    /<Callout\b([^>]*)>([\s\S]*?)<\/Callout>/gi,
-    (_match, attrs, inner) => {
-      const variantMatch = attrs.match(/variant=["']([^"']+)["']/i);
-      const variant = (variantMatch ? variantMatch[1] : "note").toLowerCase();
-      const titleMatch = attrs.match(/title=["']([^"']+)["']/i);
-      const title = titleMatch ? titleMatch[1] : (defaultTitles[variant] || "Note");
-      const stretchMatch = attrs.match(/stretch=["']([^"']+)["']/i);
-      const stretch = stretchMatch ? stretchMatch[1] : "";
-      const icon = icons[variant] || icons.note;
-
-      const body = inner
-        .trim()
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.*?)\*/g, "<em>$1</em>")
-        .replace(/`([^`]+)`/g, "<code>$1</code>")
-        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-      return `\n\n<aside class="callout-box callout-${variant}" ${stretch ? `data-stretch="${stretch}"` : ""} role="note">
-        <div class="callout-header">
-          <div class="callout-icon" aria-hidden="true">${icon}</div>
-          <span class="callout-title">${title}</span>
-        </div>
-        <div class="callout-content">
-          <p>${body}</p>
-        </div>
-      </aside>\n\n`;
-    }
-  );
-
-  // 4. Custom Block: <AmazonProduct ... />
-  html = html.replace(
-    /<AmazonProduct\b([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/AmazonProduct>)/gi,
-    (_match, attrs) => {
-      const getAttr = (k: string) => {
-        const m = attrs.match(new RegExp(`${k}=["']([^"']+)["']`, "i"));
-        return m ? m[1] : "";
-      };
-      const title = getAttr("title") || "Amazon Product";
-      const price = getAttr("price") || "";
-      const currency = getAttr("currencySymbol") || "$";
-      const image = getAttr("image");
-      const ctaText = getAttr("ctaText") || "Buy on Amazon";
-      const amazonUrl = getAttr("amazonUrl") || "#";
-      const stretch = getAttr("stretch") || "default";
-
-      return `\n\n<div class="amazon-preview-box" data-stretch="${stretch}">
-        ${image ? `<img src="${image}" alt="${title}" class="amazon-preview-img" />` : ""}
-        <div class="amazon-preview-info">
-          <h4 class="amazon-preview-title">${title}</h4>
-          ${price ? `<div class="amazon-preview-price">${currency}${price}</div>` : ""}
-          <a href="${amazonUrl}" target="_blank" rel="noopener noreferrer" class="amazon-preview-btn">${ctaText}</a>
-        </div>
-      </div>\n\n`;
-    }
-  );
-
-  // 5. Custom Block: <Schema ...> and <RelatedPosts ... />
-  html = html.replace(/<Schema\b[\s\S]*?<\/Schema>/gi, "");
-  html = html.replace(/<RelatedPosts\b[^>]*?(?:\/>|>[\s\S]*?<\/RelatedPosts>)/gi, `\n\n<div class="related-preview-box"><strong>&lt;RelatedPosts /&gt;</strong> (Recomendados automáticos)</div>\n\n`);
-
-  // 6. Code blocks (```lang ... ```)
-  html = html.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gim, (_match, _lang, code) => {
-    const escaped = code
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return `\n\n<pre class="preview-code-block"><code>${escaped}</code></pre>\n\n`;
-  });
-
-  // 7. Inline code (`code`)
-  html = html.replace(/`([^`]+)`/g, '<code class="preview-inline-code">$1</code>');
-
-  // 8. Headings
-  html = html.replace(/^#### (.*$)/gim, '<h4 class="preview-h4">$1</h4>');
-  html = html.replace(/^### (.*$)/gim, '<h3 class="preview-h3">$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2 class="preview-h2">$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1 class="preview-h1">$1</h1>');
-
-  // 9. Blockquotes
-  html = html.replace(/^\> (.*$)/gim, '<blockquote class="preview-quote">$1</blockquote>');
-
-  // 10. Images & Links
-  html = html.replace(/!\[(.*?)\]\((.*?)\)/gim, '<img alt="$1" src="$2" class="preview-img" loading="lazy" />');
-  html = html.replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-  // 11. Bold, Italic, Strikethrough
-  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
-  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
-  html = html.replace(/~~(.*?)~~/gim, '<del>$1</del>');
-
-  // 12. Lists
-  // Unordered lists
-  html = html.replace(/(?:^[*-] .*(?:\n|$))+/gm, (listBlock) => {
-    const items = listBlock
-      .trim()
-      .split('\n')
-      .map(line => `<li>${line.replace(/^[*-] /, '').trim()}</li>`)
-      .join('');
-    return `\n\n<ul class="preview-ul">${items}</ul>\n\n`;
-  });
-
-  // Ordered lists
-  html = html.replace(/(?:^\d+\. .*(?:\n|$))+/gm, (listBlock) => {
-    const items = listBlock
-      .trim()
-      .split('\n')
-      .map(line => `<li>${line.replace(/^\d+\. /, '').trim()}</li>`)
-      .join('');
-    return `\n\n<ol class="preview-ol">${items}</ol>\n\n`;
-  });
-
-  // 13. Split into paragraphs, skipping already-formatted block elements
-  const blocks = html.split(/\n{2,}/);
-  const formattedBlocks = blocks.map(block => {
-    const trimmed = block.trim();
-    if (!trimmed) return "";
-    if (/^<(aside|div|pre|blockquote|h[1-6]|ul|ol|table)/i.test(trimmed)) {
-      return trimmed;
-    }
-    return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`;
-  });
-
-  return formattedBlocks.filter(Boolean).join("\n");
-}
-
-const renderedHtml = renderPreviewMarkdown(post.contentMdx || "");
+// Render structured JSX blocks using self-contained block definitions and zero regular expressions
+const previewResult = await renderDocument(post.contentMdx || "", {
+  db,
+  post,
+  isDraftPreview: true,
+});
 ---
 
-<RootLayout hasMain={false} title={`[Preview] ${post.title}`} description={post.description}>
+<RootLayout
+  hasMain={false}
+  title={`[Preview] ${post.title}`}
+  description={post.description}
+  jsonLd={previewResult.jsonLd}
+>
   <!-- Preview Control Bar -->
   <div class="live-preview-bar">
     <div class="preview-bar-info">
@@ -245,10 +77,13 @@ const renderedHtml = renderPreviewMarkdown(post.contentMdx || "");
 
   <div class="preview-content-wrapper">
     <Template {...templateProps}>
-      <div class="preview-rendered-body" set:html={renderedHtml} />
+      <Fragment set:html={previewResult.html} />
     </Template>
   </div>
 </RootLayout>
+
+<!-- Self-contained styles aggregated dynamically from registered blocks -->
+<style is:inline set:html={previewResult.styles} />
 
 <style>
   .live-preview-bar {
@@ -321,231 +156,27 @@ const renderedHtml = renderPreviewMarkdown(post.contentMdx || "");
     min-height: 100vh;
   }
 
-  .preview-rendered-body {
-    display: contents;
+  /* Breakout and Grid column positioning */
+  :global(.prose > *) {
+    grid-column: content-start / content-end;
+    min-width: 0;
   }
 
-  /* Callout Styles */
-  :global(.callout-box) {
-    margin: 1.75rem 0;
-    padding: 1.15rem 1.4rem;
-    border-radius: var(--radius-md, 8px);
-    border-left: 4px solid var(--primary, #3b82f6);
-    background: var(--bg-surface, #ffffff);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    font-size: 0.96rem;
-    line-height: 1.6;
-    transition: transform var(--transition-fast, 0.2s ease);
-    box-sizing: border-box;
+  :global(.prose > [data-stretch="wide"]) {
+    grid-column: wide-start / wide-end !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  :global(.callout-header) {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    font-weight: 700;
-    margin-bottom: 0.6rem;
-    font-size: 0.95rem;
-    letter-spacing: 0.01em;
+  :global(.prose > [data-stretch="full"]) {
+    grid-column: full-start / full-end !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  :global(.callout-icon) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  :global(.callout-title) {
-    font-weight: 700;
-  }
-
-  :global(.callout-content) {
-    font-size: 0.95rem;
-    line-height: 1.65;
-  }
-
-  :global(.callout-content p) {
-    margin: 0.5rem 0;
-  }
-
-  :global(.callout-content p:first-child) {
-    margin-top: 0;
-  }
-
-  :global(.callout-content p:last-child) {
-    margin-bottom: 0;
-  }
-
-  /* Variant Themes */
-  :global(.callout-note) {
-    border-left-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.06);
-  }
-  :global(.callout-note .callout-header) {
-    color: #2563eb;
-  }
-
-  :global(.callout-tip) {
-    border-left-color: #10b981;
-    background: rgba(16, 185, 129, 0.06);
-  }
-  :global(.callout-tip .callout-header) {
-    color: #059669;
-  }
-
-  :global(.callout-important) {
-    border-left-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.06);
-  }
-  :global(.callout-important .callout-header) {
-    color: #7c3aed;
-  }
-
-  :global(.callout-warning) {
-    border-left-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.08);
-  }
-  :global(.callout-warning .callout-header) {
-    color: #d97706;
-  }
-
-  :global(.callout-caution) {
-    border-left-color: #ef4444;
-    background: rgba(239, 68, 68, 0.07);
-  }
-  :global(.callout-caution .callout-header) {
-    color: #dc2626;
-  }
-
-  /* YouTube Container Styles */
-  :global(.youtube-container) {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    margin: 2rem 0;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  }
-
-  :global(.youtube-container[data-stretch="full"]) {
-    border-radius: 0;
-  }
-
-  :global(.youtube-container iframe) {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: 0;
-  }
-
-  /* Amazon Product Preview Card */
-  :global(.amazon-preview-box) {
-    display: flex;
-    gap: 1.5rem;
-    padding: 1.25rem;
-    border: 1px solid var(--border-subtle, #e2e8f0);
-    border-radius: 12px;
-    background: var(--bg-surface, #ffffff);
-    margin: 2rem 0;
-    align-items: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  }
-
-  :global(.amazon-preview-img) {
-    width: 120px;
-    height: 120px;
-    object-fit: contain;
-    border-radius: 8px;
-    background: #f8fafc;
-    padding: 0.5rem;
-  }
-
-  :global(.amazon-preview-info) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  :global(.amazon-preview-title) {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-
-  :global(.amazon-preview-price) {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--primary, #3b82f6);
-  }
-
-  :global(.amazon-preview-btn) {
-    display: inline-block;
-    width: fit-content;
-    padding: 0.5rem 1.2rem;
-    background: #f59e0b;
-    color: #1e293b;
-    font-weight: 700;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 0.88rem;
-  }
-
-  :global(.related-preview-box) {
-    padding: 1rem 1.5rem;
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px dashed rgba(99, 102, 241, 0.3);
-    border-radius: 8px;
-    margin: 1.5rem 0;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-  }
-
-  :global(.preview-code-block) {
-    background: #0f172a;
-    color: #e2e8f0;
-    padding: 1.2rem 1.5rem;
-    border-radius: 8px;
-    overflow-x: auto;
-    font-family: var(--font-mono, monospace);
-    font-size: 0.9rem;
-    margin: 1.5rem 0;
-  }
-
-  :global(.preview-inline-code) {
-    background: rgba(99, 102, 241, 0.1);
-    color: var(--primary, #6366f1);
-    padding: 0.15rem 0.4rem;
-    border-radius: 4px;
-    font-family: var(--font-mono, monospace);
-    font-size: 0.88em;
-  }
-
-  :global(.preview-ul), :global(.preview-ol) {
-    padding-left: 1.5rem;
-    margin: 1rem 0;
-  }
-
-  :global(.preview-ul li), :global(.preview-ol li) {
-    margin-bottom: 0.4rem;
-  }
-
-  :global(.preview-img) {
-    max-width: 100%;
-    height: auto;
-    border-radius: 8px;
-    margin: 1.5rem 0;
-  }
-
-  :global(.preview-quote) {
-    border-left: 4px solid #38bdf8;
-    padding-left: 1rem;
-    margin: 1rem 0;
-    color: #94a3b8;
-    font-style: italic;
+  :global(.prose > [data-stretch="default"]) {
+    grid-column: content-start / content-end !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 </style>

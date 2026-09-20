@@ -5,8 +5,28 @@ The content management, authoring, and delivery model for the blog.
 ## Language
 
 **Post / Article**:
-An MDX document containing publication content, validated metadata, and embedded UI components. The terms "Post" and "Article" are used interchangeably across the system: "Post" aligns with the database model (`posts` table, `post_slug`) and editorial routes (`/admin/posts`), while "Article" reflects the editorial domain and prose presentation.
+A publication document containing validated metadata and structured block content authored in a JSX-like DSL. The terms "Post" and "Article" are used interchangeably across the system: "Post" aligns with the database model (`posts` table, `post_slug`) and editorial routes (`/admin/posts`), while "Article" reflects the editorial domain and prose presentation.
 _Avoid_: Entry, piece
+
+**Block Node**:
+A typed, schema-validated structural unit in an article document (such as `Paragraph`, `Heading`, `Callout`, `YouTube`, `AmazonProduct`, `List`, `Quote`, or `CodeBlock`), possessing a unique identifier, typed properties, and optional child blocks or inline spans.
+_Avoid_: Markdown element, raw widget
+
+**Mark & Mark Ref**:
+Inline semantic formatting attached to text spans without markdown characters. Simple styles (`Bold`, `Italic`, `Strike`, `Code`, `Underline`) are represented as Marks, while entity-referencing annotations (such as `Link` with destination `href`) are Mark Refs.
+_Avoid_: Markdown symbols, inline tag hacks
+
+**JSX Block DSL**:
+The human-friendly, unambiguous JSX-based authoring and storage syntax replacing legacy Markdown across the entire publishing pipeline.
+_Avoid_: Markdown text, MDX body
+
+**Block Registry**:
+The central typed registry (`src/blocks/registry.ts`) that auto-registers pluggable block definitions, compiling schemas, self-contained CSS styles, server-side data fetchers, and JSON-LD generators.
+_Avoid_: Component list, widget index
+
+**Document Renderer**:
+The unified rendering engine (`renderDocument`) that deterministically parses the JSX Block DSL and produces identical HTML markup, self-contained CSS, and JSON-LD graphs across both Live Draft Preview and production.
+_Avoid_: Markdown parser, regex renderer
 
 **Post Bundle / Article Bundle**:
 A folder containing a post's `index.mdx` alongside its co-located media assets within `src/content/blog/<slug>/`.
