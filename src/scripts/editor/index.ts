@@ -8,6 +8,7 @@ export interface EditorInitData {
   post: {
     id: string;
     slug: string;
+    status?: "draft" | "published";
     content_mdx?: string;
     isInitiallyLocked?: boolean;
     lockUser?: string;
@@ -95,6 +96,7 @@ export function initEditor(data: EditorInitData): void {
   saveWorkflowRef = new SaveWorkflow({
     postId: post.id,
     initialSlug: post.slug,
+    initialStatus: post.status || "draft",
     getContentMdx: () => editorView.state.doc.toString(),
     isReadOnly: () => lockManagerRef?.getReadOnly() ?? false,
     onLockConflict: (errorMsg) => {

@@ -106,47 +106,6 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
       </div>
 
       <div class="topbar-right">
-        <!-- Unified Status Selector -->
-        <div class="topbar-status-wrap" title="Article Publication Status">
-          <select id="topbar-status-select" class="topbar-status-select" disabled={initialLock.locked}>
-            <option value="draft" selected={post.status === "draft"}>Draft</option>
-            <option value="published" selected={post.status === "published"}>Published</option>
-          </select>
-        </div>
-
-        <!-- Single Unified Save Button -->
-        <button
-          type="button"
-          id="manual-save-btn"
-          class="btn btn-primary action-save-btn"
-          title="Save changes (auto-syncs to Git & D1)"
-          disabled={initialLock.locked}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-            <polyline points="17 21 17 13 7 13 7 21"/>
-            <polyline points="7 3 7 8 15 8"/>
-          </svg>
-          <span id="save-btn-text">Save</span>
-        </button>
-
-        <!-- Dynamic Live/Draft Preview Link -->
-        <a
-          href={post.status === "published" ? `/blog/${post.slug}` : `/admin/posts/${post.id}/preview`}
-          target="_blank"
-          id="preview-link"
-          class="btn btn-secondary"
-          title={post.status === "published" ? "View live published article" : "Preview draft with live styles"}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          <span id="preview-link-text">{post.status === "published" ? "View Live" : "Preview Draft"}</span>
-        </a>
-
-        <div class="topbar-divider"></div>
-
         <!-- Right Panels Toggles -->
         <button
           type="button"
@@ -174,6 +133,54 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
             <rect x="3" y="14" width="7" height="7"/>
           </svg>
           <span>Blocks</span>
+        </button>
+
+        <div class="topbar-divider"></div>
+
+        <!-- Dynamic Live/Draft Preview Link -->
+        <a
+          href={post.status === "published" ? `/blog/${post.slug}` : `/admin/posts/${post.id}/preview`}
+          target="_blank"
+          id="preview-link"
+          class="btn btn-secondary action-preview-btn"
+          title={post.status === "published" ? "View live published article" : "Preview draft with live styles"}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span id="preview-link-text">{post.status === "published" ? "View Live" : "Preview Draft"}</span>
+        </a>
+
+        <!-- Rightmost Action Buttons -->
+        <!-- Secondary Button: Guardar Borrador (if draft) / Pasar a Borrador (if published) -->
+        <button
+          type="button"
+          id="secondary-action-btn"
+          class:list={["btn", "btn-secondary", "action-secondary-btn", { "btn-unpublish": post.status === "published" }]}
+          title={post.status === "published" ? "Despublicar y retirar de producción" : "Guardar borrador en D1 (sin tocar Git)"}
+          disabled={initialLock.locked}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          <span id="secondary-btn-text">{post.status === "published" ? "Pasar a Borrador" : "Guardar Borrador"}</span>
+        </button>
+
+        <!-- Primary Button: Publicar (if draft) / Guardar Cambios (if published) -->
+        <button
+          type="button"
+          id="primary-action-btn"
+          class="btn btn-primary action-primary-btn"
+          title={post.status === "published" ? "Guardar cambios y sincronizar en GitHub main" : "Publicar en GitHub main y desplegar a producción"}
+          disabled={initialLock.locked}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+          <span id="primary-btn-text">{post.status === "published" ? "Guardar Cambios" : "Publicar"}</span>
         </button>
       </div>
     </header>
@@ -422,11 +429,12 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
             </div>
 
             <div class="form-group flex-1">
-              <label for="post-status-select">Status</label>
-              <select id="post-status-select" class="form-control">
-                <option value="draft" selected={post.status === "draft"}>Draft</option>
-                <option value="published" selected={post.status === "published"}>Published</option>
-              </select>
+              <label>Status</label>
+              <div class="drawer-status-box">
+                <span id="drawer-status-badge" class:list={["status-tag", post.status]}>
+                  {post.status === "published" ? "Published" : "Draft"}
+                </span>
+              </div>
             </div>
           </div>
 

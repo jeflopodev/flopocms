@@ -53,11 +53,11 @@ The storage module that persists raw media asset bytes to their target environme
 _Avoid_: File driver, S3 adapter
 
 **Post Lifecycle**:
-The domain module coordinating article validation, Concurrency Lock verification, MDX frontmatter serialization, Git Sync Publisher branch/PR transitions, and Cloudflare D1 persistence.
+The domain module coordinating article validation, Concurrency Lock verification, MDX frontmatter serialization, Git Sync Publisher atomic main commits, and Cloudflare D1 persistence.
 _Avoid_: Post service, article manager
 
 **Git Sync Publisher**:
-The Cloudflare Worker backend service that pushes D1 post state and assets to GitHub via the GitHub REST API upon publication, triggering static build.
+The Cloudflare Worker backend service that commits published articles directly to `main` in GitHub via the GitHub REST API upon explicit publication, triggering Cloudflare Workers static build deployment.
 _Avoid_: Deploy hook, repo sync
 
 **Breakout Component**:
@@ -68,13 +68,13 @@ _Avoid_: Bleed element, wide block
 A Sätteri AST plugin that parses embedded MDX component props at build time to synthesize a unified JSON-LD `@graph`.
 _Avoid_: Schema generator, LD parser
 
-**Content Branch / Editorial Branch**:
-An isolated Git branch (`content/<slug>`) created per article during drafting, associated with an automated Pull Request against `main`.
-_Avoid_: Working copy, temp branch
+**D1 Draft Isolation**:
+The model where unpublished draft articles are managed exclusively in Cloudflare D1 (and local filesystem in dev) without opening branches or PRs on GitHub, previewed in real-time via SSR.
+_Avoid_: Content branch, draft PR
 
-**Automated PR Merge**:
-The automated publishing transition where marking an article as `Published` commits with `draft: false`, merges the open PR into `main` via the GitHub API, and cleans up the remote content branch.
-_Avoid_: Manual merge, direct push
+**Atomic Main Publishing**:
+The explicit publishing transition where marking an article as `Published` validates metadata and commits directly to `main` via the GitHub REST API, triggering production static deployment on Cloudflare Workers.
+_Avoid_: Automated PR merge, squash merge dance
 
 **Concurrency Lock**:
 A pessimistic lock record in D1 (`post_locks`) that grants exclusive edit rights to an active editor, refreshed via heartbeats and immediately released upon closing or navigating away.

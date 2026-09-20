@@ -288,3 +288,56 @@ export async function deleteBranch(
     return false;
   }
 }
+
+/**
+ * Deletes a file from the specified branch (default: main).
+ */
+export async function deletePostFile(
+  config: GitSyncConfig,
+  targetPath: string,
+  message: string,
+  branch = "main"
+): Promise<{ success: boolean; error?: string }> {
+  const { pat, repo } = config;
+  const headers = {
+    Authorization: `Bearer ${pat}`,
+    "User-Agent": "Astro-Blog-Admin",
+    Accept: "application/vnd.github.v3+json",
+  };
+
+  try {
+    const checkRes = await fetch(
+      `https://api.github.com/repos/${repo}/contents/${targetPath}?ref=${branch}`,
+      { headers }
+    );
+    if (!checkRes.ok) {
+      // File doesn't exist on this branch, consider deleted
+      return { success: true };
+    }
+    const checkData = (await checkRes.json()) as any;
+    const sha = checkData.sha;
+    if (!sha) return { success: true };
+
+    const delRes = await fetch(`https://api.github.com/repos/${repo}/contents/${targetPath}`, {
+      method: "DELETE",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        sha,
+        branch,
+      }),
+    });
+
+    if (!delRes.ok) {
+      const errText = await delRes.text();
+      return { success: false, error: `Failed to delete file: ${errText}` };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to delete file" };
+  }
+}

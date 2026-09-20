@@ -4,10 +4,8 @@ import { posts } from "./db";
 import { getGithubPat } from "./env";
 import { getLockStatus } from "./locks";
 import {
-  ensureBranch,
   commitPostFile,
-  ensurePullRequest,
-  mergePullRequest,
+  deletePostFile,
   deleteBranch,
 } from "./git-publisher";
 
@@ -51,6 +49,7 @@ export interface SavePostResult {
   prUrl?: string | null;
   committedToGitHub?: boolean;
   merged?: boolean;
+  statusState?: "draft" | "published";
   message?: string;
   updated_at?: string;
   error?: string;
@@ -247,55 +246,39 @@ export async function savePostLifecycle(options: {
     });
   }
 
-  // 5. Git-Sync Publisher (isolated branch per post & automated PR / merge)
+  // 5. Git-Sync Publisher: Atomic main publishing for Published, clean D1 isolation for Drafts
   const githubPat = getGithubPat(locals);
-
   const repo = "jeflopodev/blog-astro";
-  const branch = `content/${cleanSlug}`;
   const targetPath = `src/content/blog/${cleanSlug}/index.mdx`;
+  const legacyBranch = `content/${cleanSlug}`;
 
   const gitResult = {
     committed: false,
-    prNumber: existing?.prNumber ?? null,
-    prUrl: existing?.prUrl ?? null,
-    merged: false,
     message: "",
   };
 
-  if (githubPat) {
-    const gitConfig = { pat: githubPat, repo };
-    await ensureBranch(gitConfig, branch, "main");
-
-    if (isDraft) {
-      // DRAFT: Commit to content/<slug> and ensure open PR
-      const commitRes = await commitPostFile(
+  if (isDraft) {
+    // DRAFT: Do NOT push to Git. Drafts live safely in D1.
+    // If this post was previously published on main, we remove it from main (unpublish)
+    if (existing?.status === "published" && githubPat) {
+      const gitConfig = { pat: githubPat, repo };
+      await deletePostFile(
         gitConfig,
-        branch,
         targetPath,
-        mdxContent,
-        `chore(content): draft update for "${title}" by @${author}`
+        `feat(blog): unpublish "${title}" (moved to draft)`
       );
-
-      if (commitRes.success) {
-        gitResult.committed = true;
-        const prRes = await ensurePullRequest(
-          gitConfig,
-          branch,
-          "main",
-          `[Draft] ${title}`,
-          `Automated editorial draft for article \`${cleanSlug}\` authored by @${author}.\n\nMerged automatically upon publishing.`
-        );
-        if (prRes.success) {
-          gitResult.prNumber = prRes.prNumber ?? null;
-          gitResult.prUrl = prRes.prUrl ?? null;
-        }
-        gitResult.message = "Draft saved to D1 & committed to branch " + branch;
-      }
+      deleteBranch(gitConfig, legacyBranch).catch(() => {});
+      gitResult.message = "Unpublished! Post moved back to draft in D1.";
     } else {
-      // PUBLISHED: Commit with draft: false, ensure PR, squash-merge into main, delete branch
+      gitResult.message = "Draft saved successfully to D1.";
+    }
+  } else {
+    // PUBLISHED: Atomic commit directly to main
+    if (githubPat) {
+      const gitConfig = { pat: githubPat, repo };
       const commitRes = await commitPostFile(
         gitConfig,
-        branch,
+        "main",
         targetPath,
         mdxContent,
         `feat(blog): publish "${title}" by @${author}`
@@ -303,50 +286,25 @@ export async function savePostLifecycle(options: {
 
       if (commitRes.success) {
         gitResult.committed = true;
-        let prNum = gitResult.prNumber;
-        if (!prNum) {
-          const prRes = await ensurePullRequest(
-            gitConfig,
-            branch,
-            "main",
-            `[Publish] ${title}`,
-            `Publication PR for article \`${cleanSlug}\` by @${author}.`
-          );
-          if (prRes.success && prRes.prNumber) {
-            prNum = prRes.prNumber;
-            gitResult.prNumber = prNum;
-            gitResult.prUrl = prRes.prUrl ?? null;
-          }
-        }
-
-        if (prNum) {
-          const mergeRes = await mergePullRequest(
-            gitConfig,
-            prNum,
-            `feat(blog): publish "${title}" (#${prNum})`,
-            "squash"
-          );
-          if (mergeRes.success) {
-            gitResult.merged = true;
-            await deleteBranch(gitConfig, branch);
-            gitResult.message = "Published! PR merged to main and branch cleaned up.";
-          } else {
-            console.error("Auto-merge error:", mergeRes.error);
-            gitResult.message = `Committed to ${branch}, but auto-merge failed: ${mergeRes.error}`;
-          }
-        }
+        gitResult.message = "Published to main on GitHub & saved to D1.";
+        deleteBranch(gitConfig, legacyBranch).catch(() => {});
+      } else {
+        console.error("GitHub commit to main error:", commitRes.error);
+        gitResult.message = `Saved to D1, but GitHub publish failed: ${commitRes.error}`;
       }
+    } else {
+      gitResult.message = "Saved to D1 as published (GitHub PAT not configured).";
     }
   }
 
-  // 5. Local filesystem fallback write
+  // 6. Local filesystem fallback write for local development
   await syncLocalFilesystem(cleanSlug, mdxContent);
 
-  // 6. Update Git sync metadata in Cloudflare D1
+  // 7. Update Git sync metadata in Cloudflare D1
   await db.update(posts).set({
-    gitBranch: isDraft ? branch : null,
-    prNumber: gitResult.prNumber,
-    prUrl: gitResult.prUrl,
+    gitBranch: null,
+    prNumber: null,
+    prUrl: null,
     updatedAt: now,
   }).where(eq(posts.id, id));
 
@@ -355,12 +313,12 @@ export async function savePostLifecycle(options: {
     status: 200,
     id,
     slug: cleanSlug,
-    gitBranch: isDraft ? branch : null,
-    prNumber: gitResult.prNumber,
-    prUrl: gitResult.prUrl,
+    gitBranch: null,
+    prNumber: null,
+    prUrl: null,
+    statusState: status,
     committedToGitHub: gitResult.committed,
-    merged: gitResult.merged,
-    message: gitResult.message || "Saved successfully!",
+    message: gitResult.message,
     updated_at: now,
   };
 }
