@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { getGithubPat } from "./env";
 
 export interface MediaFile {
   filename: string;
@@ -222,11 +222,7 @@ export class InMemoryMediaAdapter implements MediaStorage {
  * Ambient Factory that returns the appropriate MediaStorage adapter based on the runtime environment.
  */
 export function getMediaStorage(locals?: App.Locals): MediaStorage {
-  const githubPat =
-    (env as any)?.GITHUB_PAT ||
-    (locals as any)?.cfContext?.env?.GITHUB_PAT ||
-    (locals as any)?.runtime?.env?.GITHUB_PAT ||
-    (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
+  const githubPat = getGithubPat(locals);
 
   const adapters: MediaStorage[] = [];
 

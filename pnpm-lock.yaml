@@ -215,9 +215,6 @@ importers:
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
-      drizzle-seed:
-        specifier: ^0.3.1
-        version: 0.3.1(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260916.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.4))
       wrangler:
         specifier: ^4.132.0
         version: 4.132.0(@cloudflare/workers-types@5.20260916.1)(@types/node@22.20.3)
@@ -1904,14 +1901,6 @@ packages:
       zod:
         optional: true
 
-  drizzle-seed@0.3.1:
-    resolution: {integrity: sha512-F/0lgvfOAsqlYoHM/QAGut4xXIOXoE5VoAdv2FIl7DpGYVXlAzKuJO+IphkKUFK3Dz+rFlOsQLnMNrvoQ0cx7g==}
-    peerDependencies:
-      drizzle-orm: '>=0.36.4'
-    peerDependenciesMeta:
-      drizzle-orm:
-        optional: true
-
   dset@3.1.4:
     resolution: {integrity: sha512-2QF/g9/zTaPDc3BjNcVTGoBbXBgYfMTTceLaYcFJ/W9kggFUkhxD/hMEeuLKbugyef9SqAx8cpgwlIP/jinUTA==}
     engines: {node: '>=4'}
@@ -2290,9 +2279,6 @@ packages:
 
   property-information@7.2.0:
     resolution: {integrity: sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==}
-
-  pure-rand@6.1.0:
-    resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
 
   radix3@1.1.2:
     resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
@@ -4112,12 +4098,6 @@ snapshots:
       valibot: 1.5.0(typescript@7.0.2)
       zod: 4.6.4
 
-  drizzle-seed@0.3.1(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260916.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.4)):
-    dependencies:
-      pure-rand: 6.1.0
-    optionalDependencies:
-      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@5.20260916.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.4)
-
   dset@3.1.4: {}
 
   emmet@2.4.11:
@@ -4518,8 +4498,6 @@ snapshots:
   process-ancestry@0.1.0: {}
 
   property-information@7.2.0: {}
-
-  pure-rand@6.1.0: {}
 
   radix3@1.1.2: {}
 

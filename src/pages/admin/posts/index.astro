@@ -3,55 +3,15 @@ export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { desc } from "drizzle-orm";
-import { getDb, posts as postsTable, ensureSchema, type Post } from "../../../lib/db";
-import { getCollection } from "astro:content";
+import { getDb, posts as postsTable, type Post } from "../../../lib/db";
 
 const db = getDb(Astro.locals);
-await ensureSchema(Astro.locals);
 
 // Fetch posts from D1
-let posts: Post[] = await db
+const posts: Post[] = await db
   .select()
   .from(postsTable)
   .orderBy(desc(postsTable.updatedAt));
-
-// If D1 posts table is empty, auto-seed with existing articles in src/content/blog
-if (posts.length === 0) {
-  try {
-    const existingPosts = await getCollection("blog");
-    for (const post of existingPosts) {
-      const id = crypto.randomUUID();
-      const slug = post.id;
-      const title = post.data.title;
-      const description = post.data.description || "";
-      const author = post.data.author || "jeflopo";
-      const status = post.data.draft ? "draft" : "published";
-      const pubDate = post.data.pubDate.toISOString();
-      const contentMdx = post.body || "";
-
-      await db
-        .insert(postsTable)
-        .values({
-          id,
-          slug,
-          title,
-          description,
-          author,
-          status,
-          pubDate,
-          contentMdx,
-        })
-        .onConflictDoNothing();
-    }
-
-    posts = await db
-      .select()
-      .from(postsTable)
-      .orderBy(desc(postsTable.updatedAt));
-  } catch (err) {
-    console.error("Auto-sync existing posts error:", err);
-  }
-}
 ---
 
 <AdminLayout title="Articles" activeTab="posts">

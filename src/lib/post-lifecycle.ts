@@ -1,7 +1,7 @@
-import { env } from "cloudflare:workers";
 import { eq, and, ne } from "drizzle-orm";
 import type { DbClient } from "./db";
-import { posts, ensureSchema } from "./db";
+import { posts } from "./db";
+import { getGithubPat } from "./env";
 import { getLockStatus } from "./locks";
 import {
   ensureBranch,
@@ -135,7 +135,6 @@ export async function savePostLifecycle(options: {
   locals?: App.Locals;
 }): Promise<SavePostResult> {
   const { payload, user, db, locals } = options;
-  await ensureSchema(locals);
 
   const {
     id,
@@ -220,12 +219,36 @@ export async function savePostLifecycle(options: {
     contentMdx: content_mdx,
   });
 
-  // 4. Git-Sync Publisher (isolated branch per post & automated PR / merge)
-  const githubPat =
-    (env as any)?.GITHUB_PAT ||
-    (locals as any)?.cfContext?.env?.GITHUB_PAT ||
-    (locals as any)?.runtime?.env?.GITHUB_PAT ||
-    (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
+  // 4. Guaranteed D1 persistence: save post state first
+  const baseRecord = {
+    slug: cleanSlug,
+    title,
+    description,
+    category,
+    tags: tagsStr,
+    author,
+    featuredImage: featured_image,
+    contentMdx: content_mdx,
+    status,
+    template,
+    defaultWidth: default_width,
+    wideWidth: wide_width,
+    pubDate: effectivePubDate,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    await db.update(posts).set(baseRecord).where(eq(posts.id, id));
+  } else {
+    await db.insert(posts).values({
+      id,
+      createdAt: now,
+      ...baseRecord,
+    });
+  }
+
+  // 5. Git-Sync Publisher (isolated branch per post & automated PR / merge)
+  const githubPat = getGithubPat(locals);
 
   const repo = "jeflopodev/blog-astro";
   const branch = `content/${cleanSlug}`;
@@ -319,36 +342,13 @@ export async function savePostLifecycle(options: {
   // 5. Local filesystem fallback write
   await syncLocalFilesystem(cleanSlug, mdxContent);
 
-  // 6. Persist to Cloudflare D1
-  const postRecord = {
-    slug: cleanSlug,
-    title,
-    description,
-    category,
-    tags: tagsStr,
-    author,
-    featuredImage: featured_image,
-    contentMdx: content_mdx,
-    status,
-    template,
-    defaultWidth: default_width,
-    wideWidth: wide_width,
-    pubDate: effectivePubDate,
+  // 6. Update Git sync metadata in Cloudflare D1
+  await db.update(posts).set({
     gitBranch: isDraft ? branch : null,
     prNumber: gitResult.prNumber,
     prUrl: gitResult.prUrl,
     updatedAt: now,
-  };
-
-  if (existing) {
-    await db.update(posts).set(postRecord).where(eq(posts.id, id));
-  } else {
-    await db.insert(posts).values({
-      id,
-      createdAt: now,
-      ...postRecord,
-    });
-  }
+  }).where(eq(posts.id, id));
 
   return {
     success: true,
@@ -391,11 +391,7 @@ export async function deletePostLifecycle(options: {
   await db.delete(posts).where(eq(posts.id, id));
 
   let deletedFromGitHub = false;
-  const githubPat =
-    (env as any)?.GITHUB_PAT ||
-    (locals as any)?.cfContext?.env?.GITHUB_PAT ||
-    (locals as any)?.runtime?.env?.GITHUB_PAT ||
-    (typeof process !== "undefined" ? process.env?.GITHUB_PAT : null);
+  const githubPat = getGithubPat(locals);
 
   // 2. Synchronize deletion with GitHub
   if (githubPat && slug) {

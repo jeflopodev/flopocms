@@ -2,7 +2,7 @@
 export const prerender = false;
 
 import { eq, or, desc } from "drizzle-orm";
-import { getDb, posts as postsTable, assets as assetsTable, ensureSchema, type Post, type Asset } from "../../../lib/db";
+import { getDb, posts as postsTable, assets as assetsTable, type Post, type Asset } from "../../../lib/db";
 import { getLockStatus, type LockResult } from "../../../lib/locks";
 import { templateOptions } from "../../../templates";
 import { blockDefinitions } from "../../../blocks";
@@ -16,7 +16,6 @@ if (!id) {
 }
 
 const db = getDb(Astro.locals);
-await ensureSchema(Astro.locals);
 
 let post: Post | undefined;
 try {

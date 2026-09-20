@@ -13,10 +13,12 @@
     "astro": "astro",
     "check:images": "node scripts/check-image-sizes.mjs",
     "deploy": "astro build && wrangler deploy",
-    "seed": "node scripts/seed.mjs",
-    "seed:users": "node scripts/seed.mjs",
+    "create-user": "node scripts/create-user.mjs",
+    "db:reconcile": "node scripts/reconcile-content.mjs",
     "d1:migrate": "wrangler d1 migrations apply DB",
     "db:generate": "drizzle-kit generate",
+    "db:studio": "drizzle-kit studio",
+    "db:studio:remote": "drizzle-kit studio",
     "typecheck": "astro sync && tsc --noEmit"
   },
   "dependencies": {
@@ -42,7 +44,6 @@
     "@cloudflare/workers-types": "^5.20260916.1",
     "@types/node": "^22.20.3",
     "drizzle-kit": "1.0.0-rc.4",
-    "drizzle-seed": "^0.3.1",
     "wrangler": "^4.132.0"
   }
 }
