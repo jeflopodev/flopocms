@@ -72,7 +72,9 @@
    CSS Reset & Base Rules
    ========================================================================== */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -95,12 +97,19 @@ body {
   flex-direction: column;
 }
 
-img, picture, video, canvas, svg {
+img,
+picture,
+video,
+canvas,
+svg {
   display: block;
   max-width: 100%;
 }
 
-input, button, textarea, select {
+input,
+button,
+textarea,
+select {
   font: inherit;
 }
 
@@ -147,6 +156,7 @@ a:hover {
   .site-main {
     padding: 2rem 1rem 4rem;
   }
+
   .site-main.blog-post-shell {
     padding-left: 0;
     padding-right: 0;
@@ -165,11 +175,7 @@ a:hover {
   width: 100%;
   display: grid;
   grid-template-columns:
-    [full-start] minmax(var(--gutter), 1fr)
-    [wide-start] minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2)))
-    [content-start] min(100% - (var(--gutter) * 2), var(--default-width)) [content-end]
-    minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2))) [wide-end]
-    minmax(var(--gutter), 1fr) [full-end];
+    [full-start] minmax(var(--gutter), 1fr) [wide-start] minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2))) [content-start] min(100% - (var(--gutter) * 2), var(--default-width)) [content-end] minmax(0, max(0px, calc((var(--wide-content-width) - var(--default-width)) / 2))) [wide-end] minmax(var(--gutter), 1fr) [full-end];
   color: var(--text-secondary);
   font-size: 1.125rem;
   line-height: 1.75;
@@ -181,13 +187,13 @@ a:hover {
   }
 }
 
-.prose > * {
+.prose>* {
   grid-column: content-start / content-end;
   min-width: 0;
 }
 
-.prose > * + * {
-  margin-top: 1.5rem;
+.prose>*+* {
+  margin-block-start: 1rem;
 }
 
 /* Custom Components & Bleed Breakouts */
@@ -216,32 +222,37 @@ a:hover {
 }
 
 /* Inside breakout grid (.prose) */
-.prose > [data-stretch="wide"] {
+.prose>[data-stretch="wide"] {
   grid-column: wide-start / wide-end;
   width: 100%;
   max-width: 100%;
 }
 
-.prose > [data-stretch="full"] {
+.prose>[data-stretch="full"] {
   grid-column: full-start / full-end;
   width: 100%;
   max-width: 100%;
 }
 
-.prose > [data-stretch="default"] {
+.prose>[data-stretch="default"] {
   grid-column: content-start / content-end;
   width: 100%;
   max-width: 100%;
 }
 
-.prose > [data-stretch]:not([data-stretch="wide"]):not([data-stretch="full"]):not([data-stretch="default"]) {
+.prose>[data-stretch]:not([data-stretch="wide"]):not([data-stretch="full"]):not([data-stretch="default"]) {
   grid-column: full-start / full-end;
   justify-self: center;
   width: 100%;
   max-width: min(calc(100% - 2 * var(--gutter)), var(--stretch-width, var(--default-width)));
 }
 
-.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
   font-family: var(--font-display);
   color: var(--text-primary);
   font-weight: 700;
@@ -251,14 +262,23 @@ a:hover {
   margin-bottom: 1rem;
 }
 
-.prose h1 { font-size: 2.25rem; }
-.prose h2 { 
-  font-size: 1.75rem; 
+.prose h1 {
+  font-size: 2.25rem;
+}
+
+.prose h2 {
+  font-size: 1.75rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border-subtle);
 }
-.prose h3 { font-size: 1.35rem; }
-.prose h4 { font-size: 1.15rem; }
+
+.prose h3 {
+  font-size: 1.35rem;
+}
+
+.prose h4 {
+  font-size: 1.15rem;
+}
 
 .prose p {
   margin-bottom: 1.25rem;
@@ -277,7 +297,8 @@ a:hover {
   text-decoration-color: var(--primary-hover);
 }
 
-.prose strong, .prose b {
+.prose strong,
+.prose b {
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -286,7 +307,8 @@ a:hover {
   font-style: italic;
 }
 
-.prose ul, .prose ol {
+.prose ul,
+.prose ol {
   padding-left: 1.5rem;
   margin-bottom: 1.5rem;
 }
@@ -364,7 +386,8 @@ a:hover {
   border: 1px solid var(--border-subtle);
 }
 
-.prose th, .prose td {
+.prose th,
+.prose td {
   padding: 0.75rem 1rem;
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
