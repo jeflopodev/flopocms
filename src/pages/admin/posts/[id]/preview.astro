@@ -1,11 +1,12 @@
 ---
 export const prerender = false;
 
-import { eq, or } from "drizzle-orm";
-import { getDb, posts as postsTable } from "../../../../lib/db";
+import { createServices } from "../../../../lib/services";
 import RootLayout from "#/layouts/root-layout.astro";
 import { getTemplateComponent } from "../../../../templates";
 import { renderDocument } from "../../../../blocks/dsl";
+import { createArticleReadModel, toTemplateProps } from "../../../../lib/article";
+import { createD1ArticleSource } from "../../../../lib/article-sources/d1";
 
 const { id } = Astro.params;
 
@@ -13,60 +14,41 @@ if (!id) {
   return Astro.redirect("/admin/posts");
 }
 
-const db = getDb(Astro.locals);
+const services = createServices(Astro.locals);
 
-let post: any;
-try {
-  const [found] = await db
-    .select()
-    .from(postsTable)
-    .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
-    .limit(1);
-  post = found;
-} catch (err) {
-  console.error("Failed to query post for preview:", err);
-}
+// Draft content is authoritative in D1, so the preview reads the editorial record.
+const articles = createArticleReadModel(createD1ArticleSource(services.db), { includeDrafts: true });
+const article = await articles.loadVisible(id);
 
-if (!post) {
+if (!article) {
   return Astro.redirect("/admin/posts");
 }
 
-const Template = getTemplateComponent(post.template as any);
+const Template = getTemplateComponent(article.template);
 
-const templateProps = {
-  title: post.title,
-  description: post.description || "",
-  pubDate: new Date(post.pubDate || post.createdAt),
-  heroImage: post.featuredImage || undefined,
-  draft: true,
-  author: post.author as any,
-  defaultWidth: post.defaultWidth || "60rem",
-  wideWidth: post.wideWidth || "70rem",
-};
-
-// Render structured JSX blocks using self-contained block definitions and zero regular expressions
-const previewResult = await renderDocument(post.contentMdx || "", {
-  db,
-  post,
+// Render structured JSX blocks through the same engine production uses
+const previewResult = await renderDocument(article.content, {
+  articles,
+  post: article,
   isDraftPreview: true,
 });
 ---
 
 <RootLayout
   hasMain={false}
-  title={`[Preview] ${post.title}`}
-  description={post.description}
+  title={`[Preview] ${article.title}`}
+  description={article.description}
   jsonLd={previewResult.jsonLd}
 >
   <!-- Preview Control Bar -->
   <div class="live-preview-bar">
     <div class="preview-bar-info">
       <span class="preview-badge">Live Draft Preview</span>
-      <span class="preview-title">{post.title}</span>
-      <span class="preview-slug"><code>/blog/{post.slug}</code></span>
+      <span class="preview-title">{article.title}</span>
+      <span class="preview-slug"><code>/blog/{article.slug}</code></span>
     </div>
     <div class="preview-bar-actions">
-      <a href={`/admin/posts/${post.id}`} class="btn-preview-back">
+      <a href={`/admin/posts/${article.slug}`} class="btn-preview-back">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -76,7 +58,7 @@ const previewResult = await renderDocument(post.contentMdx || "", {
   </div>
 
   <div class="preview-content-wrapper">
-    <Template {...templateProps}>
+    <Template {...toTemplateProps(article)} draft={true}>
       <Fragment set:html={previewResult.html} />
     </Template>
   </div>

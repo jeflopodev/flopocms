@@ -3,7 +3,8 @@ export const prerender = false;
 
 import RootLayout from "#/layouts/root-layout.astro";
 import { eq } from "drizzle-orm";
-import { getDb, users } from "../../lib/db";
+import { users } from "../../lib/db";
+import { createServices } from "../../lib/services";
 import { verifyPassword } from "../../lib/auth";
 import { createSession } from "../../lib/session";
 
@@ -18,7 +19,7 @@ if (Astro.request.method === "POST") {
     if (!username || !password) {
       errorMessage = "Please provide both username and password.";
     } else {
-      const db = getDb(Astro.locals);
+      const { db } = createServices(Astro.locals);
       const [user] = await db
         .select()
         .from(users)

@@ -31,3 +31,11 @@ Furthermore, custom components were hardcoded across the editor UI, auto-import 
 
 4. **URL Slug Automation**:
    - Slugs are automatically computed in real time from article titles using `slugify`.
+
+## Amendment (2026-09-21)
+
+Decision 2's `.astro` component markup and ambient auto-import are gone, and the Sätteri markdown processor went with them. [ADR-0010](0010-structured-jsx-block-dsl-and-pluggable-registry.md) replaced component-based rendering with the Document Renderer, which emits HTML strings from each block's `render`, so the seven `src/blocks/*/*.astro` components, the `blockImports` table, `astro-auto-import`, the `satteri()` processor and the `satteriSchemaExtractor` plugin were configuration keeping dead code alive. Removing all of it produced **byte-identical** article HTML, which is how they were identified. `@astrojs/mdx` stays, and only as the loader that lets the content collection read `.mdx` bundles.
+
+`RelatedPosts` was unaffected by the deletion, but not because it was healthy: the deleted component held its own `getDb` query, unaware of the authority rule in [ADR-0011](0011-published-article-authority.md). The block itself reads through the Article Read Model in `loadServerData`.
+
+The size limits in decision 1 are now spelled as a person reads them (`2 MB` / `25 MB`, rather than `MiB`) and live in one dependency-free rules module that the Worker and the browser both import, so the verdict is not written out per call site.

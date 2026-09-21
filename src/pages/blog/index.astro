@@ -1,9 +1,11 @@
 ---
 import { Image } from "astro:assets";
 import RootLayout from "#/layouts/root-layout.astro";
-import { getVisibleBlogArticles } from "../../utils/articles";
+import { createEnvironmentReadModel, isBundledHeroImage } from "../../lib/article";
+import { createGitBundleSource } from "../../lib/article-sources/git-bundle";
 
-const posts = await getVisibleBlogArticles();
+// Reads through the same seam as the Article pages: one visibility rule, one shape.
+const posts = await createEnvironmentReadModel(createGitBundleSource()).listVisible();
 ---
 
 <RootLayout title="Articles" class="blog-main">
@@ -19,28 +21,32 @@ const posts = await getVisibleBlogArticles();
     <div class="posts-list">
       {posts.map((post, index) => (
         <article class="post-item">
-          <a href={`/blog/${post.id}/`} class="post-card">
-            {post.data.heroImage && (
+          <a href={`/blog/${post.slug}/`} class="post-card">
+            {post.heroImage && (
               <div class="card-image-wrapper">
-                <Image
-                  width={900}
-                  height={480}
-                  src={post.data.heroImage}
-                  alt={post.data.title}
-                  class="card-img"
-                />
+                {isBundledHeroImage(post.heroImage) ? (
+                  <Image
+                    width={900}
+                    height={480}
+                    src={post.heroImage}
+                    alt={post.title}
+                    class="card-img"
+                  />
+                ) : (
+                  <img src={post.heroImage} alt={post.title} class="card-img" />
+                )}
               </div>
             )}
             <div class="card-content">
               <div class="card-meta">
-                {post.data.draft && <span class="draft-badge">Draft</span>}
-                {index === 0 && !post.data.draft && <span class="featured-badge">Latest Article</span>}
-                <time datetime={post.data.pubDate.toISOString()}>
-                  {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(post.data.pubDate)}
+                {post.status === "draft" && <span class="draft-badge">Draft</span>}
+                {index === 0 && post.status !== "draft" && <span class="featured-badge">Latest Article</span>}
+                <time datetime={post.pubDate}>
+                  {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(post.pubDate))}
                 </time>
               </div>
-              <h2 class="card-title">{post.data.title}</h2>
-              <p class="card-desc">{post.data.description}</p>
+              <h2 class="card-title">{post.title}</h2>
+              <p class="card-desc">{post.description}</p>
               <span class="read-more">
                 Read article
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">

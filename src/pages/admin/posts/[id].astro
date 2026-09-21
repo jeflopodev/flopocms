@@ -1,13 +1,17 @@
 ---
 export const prerender = false;
 
-import { eq, or, desc } from "drizzle-orm";
-import { getDb, posts as postsTable, assets as assetsTable, type Post, type Asset } from "../../../lib/db";
-import { getLockStatus, type LockResult } from "../../../lib/locks";
+import { type Asset } from "../../../lib/db";
+import { listAssets } from "../../../lib/asset-registry";
+import { createServices } from "../../../lib/services";
+import type { PostRecord } from "../../../lib/post-store";
+import { type LockResult } from "../../../lib/locks";
 import { templateOptions } from "../../../templates";
-import { blockDefinitions } from "../../../blocks";
+import { getEditorBlockCards } from "../../../blocks/registry";
 import "../../../styles/global.css";
 import "../../../styles/editor.css";
+
+const editorCards = getEditorBlockCards();
 
 const { id } = Astro.params;
 
@@ -15,37 +19,33 @@ if (!id) {
   return Astro.redirect("/admin/posts");
 }
 
-const db = getDb(Astro.locals);
+const services = createServices(Astro.locals);
 
-let post: Post | undefined;
+let loaded: PostRecord | null = null;
 try {
-  const [found] = await db
-    .select()
-    .from(postsTable)
-    .where(or(eq(postsTable.id, id), eq(postsTable.slug, id)))
-    .limit(1);
-  post = found;
+  loaded = await services.posts.find(id);
 } catch (err) {
-  console.error("Failed to query post by id/slug:", err);
+  console.error("Failed to load post by id/slug:", err);
 }
 
-if (!post) {
+if (!loaded) {
   return Astro.redirect("/admin/posts");
 }
 
+const post: PostRecord = loaded;
 const user = Astro.locals.user || { id: "unknown", username: post.author || "jeflopo" };
 let initialLock: LockResult = { success: true, locked: false, isOwner: false };
 try {
-  initialLock = await getLockStatus(db, post.id, user.id);
+  initialLock = await services.locks.status(post.id, user.id);
 } catch (err) {
   console.warn("Failed to get initial lock:", err);
 }
 
 let initialAssets: Asset[] = [];
 try {
-  initialAssets = await db.select().from(assetsTable).orderBy(desc(assetsTable.createdAt));
+  initialAssets = await listAssets(services.db);
 } catch (err) {
-  console.error("Failed to query assets:", err);
+  console.error("Failed to list assets:", err);
 }
 
 // Parse tags
@@ -59,7 +59,7 @@ try {
   if (post.tags) parsedTags = [post.tags];
 }
 
-const rawPubDate = post.pubDate || (post as any).pub_date;
+const rawPubDate = post.pubDate;
 const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Date().toISOString().split("T")[0];
 ---
 
@@ -207,13 +207,13 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
         <!-- Formatting Toolbar -->
         <div class="editor-toolbar">
           <div class="toolbar-group">
-            <button type="button" class="tool-btn" data-tool="bold" title="Bold (****)">
+            <button type="button" class="tool-btn" data-tool="bold" title="Bold">
               <strong>B</strong>
             </button>
-            <button type="button" class="tool-btn" data-tool="italic" title="Italic (**)">
+            <button type="button" class="tool-btn" data-tool="italic" title="Italic">
               <em>I</em>
             </button>
-            <button type="button" class="tool-btn" data-tool="strike" title="Strikethrough (~~~~)">
+            <button type="button" class="tool-btn" data-tool="strike" title="Strikethrough">
               <s>S</s>
             </button>
           </div>
@@ -222,30 +222,30 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
 
           <!-- Headings H1 to H6 -->
           <div class="toolbar-group headings-group">
-            <button type="button" class="tool-btn" data-tool="h1" title="Heading 1 (# )">H1</button>
-            <button type="button" class="tool-btn" data-tool="h2" title="Heading 2 (## )">H2</button>
-            <button type="button" class="tool-btn" data-tool="h3" title="Heading 3 (### )">H3</button>
-            <button type="button" class="tool-btn" data-tool="h4" title="Heading 4 (#### )">H4</button>
-            <button type="button" class="tool-btn" data-tool="h5" title="Heading 5 (##### )">H5</button>
-            <button type="button" class="tool-btn" data-tool="h6" title="Heading 6 (###### )">H6</button>
+            <button type="button" class="tool-btn" data-tool="h1" title="Heading 1">H1</button>
+            <button type="button" class="tool-btn" data-tool="h2" title="Heading 2">H2</button>
+            <button type="button" class="tool-btn" data-tool="h3" title="Heading 3">H3</button>
+            <button type="button" class="tool-btn" data-tool="h4" title="Heading 4">H4</button>
+            <button type="button" class="tool-btn" data-tool="h5" title="Heading 5">H5</button>
+            <button type="button" class="tool-btn" data-tool="h6" title="Heading 6">H6</button>
           </div>
 
           <div class="toolbar-divider"></div>
 
           <div class="toolbar-group">
-            <button type="button" class="tool-btn" data-tool="link" title="Link ([]())">
+            <button type="button" class="tool-btn" data-tool="link" title="Link">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
               </svg>
             </button>
-            <button type="button" class="tool-btn" data-tool="quote" title="Quote (> )">
+            <button type="button" class="tool-btn" data-tool="quote" title="Quote">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
                 <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
               </svg>
             </button>
-            <button type="button" class="tool-btn" data-tool="code" title="Code Block (```)">
+            <button type="button" class="tool-btn" data-tool="code" title="Code Block">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="16 18 22 12 16 6"/>
                 <polyline points="8 6 2 12 8 18"/>
@@ -256,7 +256,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
           <div class="toolbar-divider"></div>
 
           <div class="toolbar-group">
-            <button type="button" class="tool-btn" data-tool="bullet" title="Bullet List (- )">
+            <button type="button" class="tool-btn" data-tool="bullet" title="Bullet List">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="8" y1="6" x2="21" y2="6"/>
                 <line x1="8" y1="12" x2="21" y2="12"/>
@@ -266,7 +266,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
                 <line x1="3" y1="18" x2="3.01" y2="18"/>
               </svg>
             </button>
-            <button type="button" class="tool-btn" data-tool="numbered" title="Numbered List (1. )">
+            <button type="button" class="tool-btn" data-tool="numbered" title="Numbered List">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="10" y1="6" x2="21" y2="6"/>
                 <line x1="10" y1="12" x2="21" y2="12"/>
@@ -366,7 +366,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
                 type="text"
                 id="post-default-width-field"
                 class="form-control"
-                value={post.defaultWidth || (post as any).default_width || "60rem"}
+                value={post.defaultWidth || "60rem"}
                 placeholder="60rem"
               />
               <span class="field-hint">Standard prose (e.g. <code>60rem</code>)</span>
@@ -378,7 +378,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
                 type="text"
                 id="post-wide-width-field"
                 class="form-control"
-                value={post.wideWidth || (post as any).wide_width || "70rem"}
+                value={post.wideWidth || "70rem"}
                 placeholder="70rem"
               />
               <span class="field-hint">Stretch breakout (e.g. <code>70rem</code>)</span>
@@ -471,146 +471,37 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
         <div id="blocks-panel-content" class="panel-content">
           <div class="blocks-intro">
             <p>
-              Click any block card to insert it into your article. All blocks are isolated, validated with Valibot, and globally imported!
+              Click any block card to insert it into your article. Every block is isolated, validated with Valibot, and rendered by the Document Renderer.
             </p>
           </div>
 
-          <!-- Callout Alerts Block Card -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon alert">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
+          <!-- Block cards are rendered from the Block Registry, so a new block adds no markup here -->
+          {editorCards.map((card) => (
+            <div class="block-card">
+              <div class="block-card-header">
+                <div class="block-icon" set:html={card.icon} />
+                <div>
+                  <h3 class="block-title">{`<${card.tagName} />`}</h3>
+                  <span class="block-desc">{card.description}</span>
+                </div>
               </div>
-              <div>
-                <h3 class="block-title">&lt;Callout /&gt;</h3>
-                <span class="block-desc">Accessible alert callouts</span>
-              </div>
-            </div>
-            <div class="callout-insert-grid">
-              <button type="button" class="btn-callout" data-callout="note">Note</button>
-              <button type="button" class="btn-callout" data-callout="tip">Tip</button>
-              <button type="button" class="btn-callout" data-callout="important">Important</button>
-              <button type="button" class="btn-callout" data-callout="warning">Warning</button>
-              <button type="button" class="btn-callout" data-callout="caution">Caution</button>
-            </div>
-          </div>
-
-          <!-- Complex List Block Card -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon list">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="8" y1="6" x2="21" y2="6"/>
-                  <line x1="8" y1="12" x2="21" y2="12"/>
-                  <line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/>
-                  <line x1="3" y1="12" x2="3.01" y2="12"/>
-                  <line x1="3" y1="18" x2="3.01" y2="18"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">&lt;Ul /&gt; &amp; &lt;Ol /&gt;</h3>
-                <span class="block-desc">Nested list with custom list-style-type</span>
+              <p class="block-preview-code">{card.preview}</p>
+              <div class:list={[{ "callout-insert-grid": card.insertions.length > 1 }]}>
+                {card.insertions.map((insertion) => (
+                  <button
+                    type="button"
+                    class:list={[{
+                      "btn-callout": card.insertions.length > 1,
+                      "btn-insert-block": card.insertions.length <= 1,
+                    }]}
+                    data-snippet={`\n${insertion.snippet}\n`}
+                  >
+                    {insertion.label}
+                  </button>
+                ))}
               </div>
             </div>
-            <p class="block-preview-code">
-              &lt;Ul list-style-type="disc"&gt;...&lt;/Ul&gt;
-            </p>
-            <button type="button" class="btn-insert-block" data-insert="list">
-              + Insert Complex List
-            </button>
-          </div>
-
-          <!-- Amazon Product Card -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon amazon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="9" cy="21" r="1"/>
-                  <circle cx="20" cy="21" r="1"/>
-                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">&lt;AmazonProduct /&gt;</h3>
-                <span class="block-desc">Product showcase with global assets</span>
-              </div>
-            </div>
-            <p class="block-preview-code">
-              &lt;AmazonProduct asin="B0..." price="$..." image="/uploads/..." /&gt;
-            </p>
-            <button type="button" class="btn-insert-block" data-insert="amazon">
-              + Insert Product Block
-            </button>
-          </div>
-
-          <!-- YouTube Embed Card -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon youtube">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">&lt;YouTube /&gt;</h3>
-                <span class="block-desc">Responsive video embed</span>
-              </div>
-            </div>
-            <p class="block-preview-code">
-              &lt;YouTube id="..." title="..." stretch="wide" /&gt;
-            </p>
-            <button type="button" class="btn-insert-block" data-insert="youtube">
-              + Insert YouTube Video
-            </button>
-          </div>
-
-          <!-- Related Posts Block Card (D1-powered) -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon related">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">&lt;RelatedPosts /&gt;</h3>
-                <span class="block-desc">D1 database query based on categories</span>
-              </div>
-            </div>
-            <p class="block-preview-code">
-              &lt;RelatedPosts category="{post.category || 'General'}" limit=3 /&gt;
-            </p>
-            <button type="button" class="btn-insert-block" data-insert="related">
-              + Insert Related Posts
-            </button>
-          </div>
-
-          <!-- JSON-LD Schema Card -->
-          <div class="block-card">
-            <div class="block-card-header">
-              <div class="block-icon schema">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6a1.78 1.78 0 0 0 0-3.2z"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="block-title">&lt;Schema /&gt;</h3>
-                <span class="block-desc">Structured FAQ / Article JSON-LD</span>
-              </div>
-            </div>
-            <p class="block-preview-code">
-              &lt;Schema type="FAQPage"&gt;...&lt;/Schema&gt;
-            </p>
-            <button type="button" class="btn-insert-block" data-insert="schema">
-              + Insert Schema Block
-            </button>
-          </div>
+          ))}
         </div>
       </aside>
     </main>
@@ -674,22 +565,12 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
       </div>
     </dialog>
 
-    <!-- Initial Data Payload -->
+    <!-- Initial Data Payload. Only what the Editor Client cannot read from the DOM. -->
     <script id="initial-post-data" type="application/json" set:html={JSON.stringify({
       id: post.id,
       slug: post.slug,
-      title: post.title,
-      description: post.description || "",
-      category: post.category || "General",
-      tags: parsedTags,
-      author: post.author || "jeflopo",
-      featured_image: post.featuredImage || (post as any).featured_image || "",
-      content_mdx: post.contentMdx || (post as any).content_mdx || "",
       status: post.status || "draft",
-      template: post.template || "default",
-      default_width: post.defaultWidth || (post as any).default_width || "60rem",
-      wide_width: post.wideWidth || (post as any).wide_width || "70rem",
-      pub_date: post.pubDate || (post as any).pub_date || "",
+      content_mdx: post.contentMdx || "",
       isInitiallyLocked: initialLock.locked,
       lockUser: initialLock.lock?.username || "",
     })} />

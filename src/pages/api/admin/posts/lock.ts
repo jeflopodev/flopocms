@@ -1,149 +1,86 @@
 export const prerender = false;
 
-import type { APIRoute } from "astro";
-import { getDb } from "../../../../lib/db";
-import { acquireLock, renewLock, releaseLock, getLockStatus } from "../../../../lib/locks";
+import { adminRoute, readJson } from "../../../../lib/admin-route";
 
-export const GET: APIRoute = async ({ request, locals }) => {
-  try {
-    const user = locals.user;
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+/**
+ * The lock's three verbs in one file still, but no longer three copies of the same
+ * envelope: acquiring, renewing and releasing differ only in which Lock Store verb they
+ * call.
+ */
+
+/**
+ * The Concurrency Lock's TTL, in seconds.
+ *
+ * A heartbeat well inside it keeps the lock alive; a closed tab lets it lapse, so the other
+ * Editor is never permanently shut out.
+ */
+const TTL_SECONDS = 45;
+
+interface LockRequestBody {
+  postId?: string;
+  action?: "acquire" | "renew" | "release";
+}
+
+/**
+ * Where a lock request names its Article.
+ *
+ * `fetch` puts it in the query string; `sendBeacon`, which cannot set a content type,
+ * puts it in the body — so both are read before the request is refused.
+ */
+async function lockRequest(
+  request: Request,
+  url: URL
+): Promise<{ postId: string | null; action: "acquire" | "renew" | "release" }> {
+  let postId = url.searchParams.get("postId");
+  let action: string | null = url.searchParams.get("action");
+
+  if ((!postId || !action) && request.headers.get("content-type")?.includes("application/json")) {
+    const raw = await readJson(request);
+    if (raw.ok) {
+      const body = raw.value as LockRequestBody;
+      if (body?.postId) postId = body.postId;
+      if (body?.action) action = body.action;
     }
-
-    const url = new URL(request.url);
-    const postId = url.searchParams.get("postId");
-
-    if (!postId) {
-      return new Response(JSON.stringify({ error: "Missing postId" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const db = getDb(locals);
-    const status = await getLockStatus(db, postId, user.id);
-
-    return new Response(JSON.stringify(status), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Get lock error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Failed to get lock status" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
   }
-};
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  try {
-    const user = locals.user;
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+  return {
+    postId,
+    action: action === "renew" || action === "release" ? action : "acquire",
+  };
+}
 
-    const url = new URL(request.url);
-    let postId = url.searchParams.get("postId");
-    let action = url.searchParams.get("action") || "acquire";
+export const GET = adminRoute(async ({ url, user, services }) => {
+  const postId = url.searchParams.get("postId");
+  if (!postId) return { status: 400, error: "Missing postId" };
 
-    if (!postId && request.headers.get("content-type")?.includes("application/json")) {
-      try {
-        const body = (await request.json()) as { postId?: string; action?: "acquire" | "renew" | "release" };
-        if (body.postId) postId = body.postId;
-        if (body.action) action = body.action;
-      } catch {}
-    }
+  return services.locks.status(postId, user.id);
+});
 
-    if (!postId) {
-      return new Response(JSON.stringify({ error: "Missing postId" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+export const POST = adminRoute(async ({ request, url, user, services }) => {
+  const { postId, action } = await lockRequest(request, url);
+  if (!postId) return { status: 400, error: "Missing postId" };
 
-    const db = getDb(locals);
-
-    if (action === "release") {
-      await releaseLock(db, postId, user.id);
-      return new Response(JSON.stringify({ success: true, released: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (action === "renew") {
-      await renewLock(db, postId, user.id, 45);
-      return new Response(JSON.stringify({ success: true, renewed: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Default: acquire
-    const result = await acquireLock(db, postId, { id: user.id, username: user.username }, 45);
-
-    return new Response(JSON.stringify(result), {
-      status: result.locked ? 423 : 200, // 423 Locked if held by someone else
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Lock error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Failed to manage lock" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  if (action === "release") {
+    await services.locks.release(postId, user.id);
+    return { success: true, released: true };
   }
-};
 
-export const DELETE: APIRoute = async ({ request, locals }) => {
-  try {
-    const user = locals.user;
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Support both JSON body and search params (for sendBeacon or fetch)
-    let postId: string | null = null;
-    const url = new URL(request.url);
-    postId = url.searchParams.get("postId");
-
-    if (!postId && request.headers.get("content-type")?.includes("application/json")) {
-      try {
-        const body = (await request.json()) as any;
-        postId = body?.postId;
-      } catch {}
-    }
-
-    if (!postId) {
-      return new Response(JSON.stringify({ error: "Missing postId" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const db = getDb(locals);
-    await releaseLock(db, postId, user.id);
-
-    return new Response(JSON.stringify({ success: true, released: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Release lock error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Failed to release lock" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  if (action === "renew") {
+    await services.locks.renew(postId, user.id, TTL_SECONDS);
+    return { success: true, renewed: true };
   }
-};
+
+  const result = await services.locks.acquire(postId, { id: user.id, username: user.username }, TTL_SECONDS);
+
+  // 423 Locked: another Editor holds it, so the session keeps the unsaved work.
+  return { ...result, status: result.locked ? 423 : 200 };
+});
+
+export const DELETE = adminRoute(async ({ request, url, user, services }) => {
+  const { postId } = await lockRequest(request, url);
+  if (!postId) return { status: 400, error: "Missing postId" };
+
+  await services.locks.release(postId, user.id);
+
+  return { success: true, released: true };
+});

@@ -36,11 +36,28 @@ jobs:
       - name: Type check
         run: pnpm run typecheck
 
+      - name: Unit tests
+        run: pnpm run test
+
       - name: Build project
         env:
           ENVIRONMENT: production
           NODE_ENV: production
         run: pnpm run build
+
+      - name: Collect the Article snapshot
+        run: pnpm run review:collect
+
+      - name: Dump the D1 projection
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm run db:dump
+
+      # Published content is authoritative on main and Draft content in D1 (ADR-0011), so the
+      # two stores can drift unnoticed. This fails the deploy when they disagree.
+      - name: Article Store divergence check
+        run: pnpm run check:divergence
 
       - name: Apply D1 database migrations
         continue-on-error: true

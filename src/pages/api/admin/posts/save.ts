@@ -1,33 +1,17 @@
 export const prerender = false;
 
-import type { APIRoute } from "astro";
-import { getDb } from "../../../../lib/db";
-import { savePostLifecycle, type SavePostPayload } from "../../../../lib/post-lifecycle";
+import { adminRoute, readJson } from "../../../../lib/admin-route";
+import { articleWriteModel } from "../../../../lib/article-write-model";
+import { savePostLifecycle } from "../../../../lib/post-lifecycle";
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  try {
-    const user = locals.user;
-    if (!user) {
-      return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+export const POST = adminRoute(async ({ request, user, services }) => {
+  const raw = await readJson(request);
+  if (!raw.ok) return { success: false, status: 400, error: raw.error };
 
-    const db = getDb(locals);
-    const payload = (await request.json()) as SavePostPayload;
+  // Untrusted JSON in, write model out. A field with the wrong type is named here
+  // rather than arriving as `undefined` for the store's default to absorb.
+  const parsed = articleWriteModel(raw.value);
+  if (!parsed.ok) return { success: false, status: 400, error: parsed.error };
 
-    const result = await savePostLifecycle({ payload, user, db, locals });
-
-    return new Response(JSON.stringify(result), {
-      status: result.status || (result.success ? 200 : 400),
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Save post error:", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || "Failed to save post" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-};
+  return savePostLifecycle({ payload: parsed.model, actor: user, services });
+});

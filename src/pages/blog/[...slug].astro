@@ -1,34 +1,45 @@
 ---
-import { type CollectionEntry } from "astro:content";
 import RootLayout from "#/layouts/root-layout.astro";
-import { getVisibleBlogArticles } from "../../utils/articles";
 import { getTemplateComponent } from "../../templates";
 import { renderDocument } from "../../blocks/dsl";
+import { createEnvironmentReadModel, toTemplateProps, type Article } from "../../lib/article";
+import { createGitBundleSource } from "../../lib/article-sources/git-bundle";
 
+/**
+ * Production reads the published Post Bundles from main at build time. The same read
+ * model serves Live Draft Preview, which is why both render identical markup.
+ */
 export async function getStaticPaths() {
-	const posts = await getVisibleBlogArticles();
-	return posts.map((post) => ({
-		params: { slug: post.id },
-		props: post,
-	}));
+  // Built inside this function from imports only: getStaticPaths is hoisted out of the
+  // frontmatter scope, so bindings declared below are not available inside it.
+  const all = await createEnvironmentReadModel(createGitBundleSource()).listVisible();
+  return all.map((article) => ({
+    params: { slug: article.slug },
+    props: { article },
+  }));
 }
-type Props = CollectionEntry<"blog">;
 
-const post = Astro.props;
-const { html, jsonLd, styles } = await renderDocument(post.body || "", {
+type Props = { article: Article };
+
+const { article } = Astro.props;
+const articles = createEnvironmentReadModel(createGitBundleSource());
+
+const { html, jsonLd, styles } = await renderDocument(article.content, {
+  articles,
   post: {
-    id: post.id,
-    slug: post.id,
-    title: post.data.title,
-    author: post.data.author,
-    category: (post.data as any).category,
+    id: article.slug,
+    slug: article.slug,
+    title: article.title,
+    author: article.author,
+    category: article.category,
   },
 });
-const Template = getTemplateComponent(post.data.template);
+
+const Template = getTemplateComponent(article.template);
 ---
 
-<RootLayout hasMain={false} jsonLd={jsonLd} title={post.data.title} description={post.data.description}>
-	<Template {...post.data}>
+<RootLayout hasMain={false} jsonLd={jsonLd} title={article.title} description={article.description}>
+	<Template {...toTemplateProps(article)}>
 		<Fragment set:html={html} />
 	</Template>
 </RootLayout>

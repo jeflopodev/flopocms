@@ -1,4 +1,4 @@
-import { getGithubPat } from "./env";
+import type { GithubContents } from "./github-contents";
 
 export interface MediaFile {
   filename: string;
@@ -17,106 +17,29 @@ export interface MediaStorage {
   deleteMedia(filename: string): Promise<MediaStorageResult>;
 }
 
-export class GitHubMediaAdapter implements MediaStorage {
-  constructor(
-    private pat: string,
-    private repo: string = "jeflopodev/blog-astro",
-    private branch: string = "main"
-  ) {}
+/** Uploads land in the global Asset Registry path, so every Article can reference them. */
+const UPLOADS_PREFIX = "public/uploads/";
 
-  private getHeaders() {
-    return {
-      Authorization: `Bearer ${this.pat}`,
-      "User-Agent": "Astro-Blog-Admin",
-      Accept: "application/vnd.github.v3+json",
-      "Content-Type": "application/json",
-    };
-  }
+export class GitHubMediaAdapter implements MediaStorage {
+  constructor(private readonly contents: GithubContents) {}
 
   async writeMedia(file: MediaFile): Promise<MediaStorageResult> {
-    const targetPath = `public/uploads/${file.filename}`;
-    const headers = this.getHeaders();
-    let sha: string | undefined;
+    const res = await this.contents.putFile(`${UPLOADS_PREFIX}${file.filename}`, file.content, {
+      // Assets are not content: skip the production build they would otherwise trigger.
+      message: `media(global): upload ${file.filename} [skip ci]`,
+    });
 
-    try {
-      const checkRes = await fetch(
-        `https://api.github.com/repos/${this.repo}/contents/${targetPath}?ref=${this.branch}`,
-        { headers }
-      );
-      if (checkRes.ok) {
-        const checkData = (await checkRes.json()) as any;
-        sha = checkData.sha;
-      }
-    } catch (err) {
-      console.warn("GitHub check file warning:", err);
+    if (!res.success) {
+      return { success: false, error: res.error || "Failed to commit media to GitHub" };
     }
-
-    const base64Content = Buffer.from(file.content).toString("base64");
-
-    try {
-      const putRes = await fetch(
-        `https://api.github.com/repos/${this.repo}/contents/${targetPath}`,
-        {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({
-            message: `media(global): upload ${file.filename} [skip ci]`,
-            content: base64Content,
-            branch: this.branch,
-            ...(sha ? { sha } : {}),
-          }),
-        }
-      );
-
-      if (!putRes.ok) {
-        const putError = await putRes.text();
-        console.error("GitHub media upload error:", putError);
-        return { success: false, error: putError };
-      }
-
-      return { success: true, url: `/uploads/${file.filename}` };
-    } catch (err: any) {
-      return { success: false, error: err.message || "Failed to commit media to GitHub" };
-    }
+    return { success: true, url: `/uploads/${file.filename}` };
   }
 
   async deleteMedia(filename: string): Promise<MediaStorageResult> {
-    const targetPath = `public/uploads/${filename}`;
-    const headers = this.getHeaders();
-
-    try {
-      const checkRes = await fetch(
-        `https://api.github.com/repos/${this.repo}/contents/${targetPath}?ref=${this.branch}`,
-        { headers }
-      );
-
-      if (!checkRes.ok) {
-        return { success: true }; // Already deleted or not found
-      }
-
-      const checkData = (await checkRes.json()) as any;
-      if (!checkData?.sha) {
-        return { success: true };
-      }
-
-      const delRes = await fetch(
-        `https://api.github.com/repos/${this.repo}/contents/${targetPath}`,
-        {
-          method: "DELETE",
-          headers,
-          body: JSON.stringify({
-            message: `media(global): delete ${filename}`,
-            sha: checkData.sha,
-            branch: this.branch,
-          }),
-        }
-      );
-
-      return { success: delRes.ok };
-    } catch (err: any) {
-      console.warn("GitHub media deletion warning:", err);
-      return { success: false, error: err.message || "Failed to delete media from GitHub" };
-    }
+    const res = await this.contents.deleteFile(`${UPLOADS_PREFIX}${filename}`, {
+      message: `media(global): delete ${filename}`,
+    });
+    return { success: res.success, error: res.error };
   }
 }
 
@@ -219,15 +142,15 @@ export class InMemoryMediaAdapter implements MediaStorage {
 }
 
 /**
- * Ambient Factory that returns the appropriate MediaStorage adapter based on the runtime environment.
+ * Selects the Media Storage adapters for the runtime environment.
+ * GitHub storage is used only when a Contents module is available; local disk is
+ * used only when a Node filesystem exists. Both means: keep them in step.
  */
-export function getMediaStorage(locals?: App.Locals): MediaStorage {
-  const githubPat = getGithubPat(locals);
-
+export function getMediaStorage(contents: GithubContents | null): MediaStorage {
   const adapters: MediaStorage[] = [];
 
-  if (githubPat) {
-    adapters.push(new GitHubMediaAdapter(githubPat));
+  if (contents) {
+    adapters.push(new GitHubMediaAdapter(contents));
   }
 
   if (typeof process !== "undefined" && process.versions?.node) {
@@ -235,7 +158,7 @@ export function getMediaStorage(locals?: App.Locals): MediaStorage {
   }
 
   if (adapters.length === 0) {
-    // Fallback if neither is configured (e.g. testing)
+    // Neither configured: a local substitute keeps callers working.
     return new InMemoryMediaAdapter();
   }
 

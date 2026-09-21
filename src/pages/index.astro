@@ -2,9 +2,12 @@
 import { Image } from "astro:assets";
 import RootLayout from "#/layouts/root-layout.astro";
 import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
-import { getVisibleBlogArticles } from "../utils/articles";
+import { createEnvironmentReadModel, isBundledHeroImage } from "../lib/article";
+import { createGitBundleSource } from "../lib/article-sources/git-bundle";
 
-const posts = (await getVisibleBlogArticles()).slice(0, 3);
+// The same read model the Article pages read through, so a listing can never show a Draft
+// that production hides, and the Draft visibility rule has one owner.
+const posts = (await createEnvironmentReadModel(createGitBundleSource()).listVisible()).slice(0, 3);
 ---
 
 <RootLayout title="Home">
@@ -96,24 +99,28 @@ const posts = (await getVisibleBlogArticles()).slice(0, 3);
     <div class="recent-grid">
       {posts.map((post) => (
         <article class="recent-card">
-          <a href={`/blog/${post.id}/`} class="recent-card-inner">
-            {post.data.heroImage && (
+          <a href={`/blog/${post.slug}/`} class="recent-card-inner">
+            {post.heroImage && (
               <div class="recent-img-box">
-                <Image
-                  width={540}
-                  height={280}
-                  src={post.data.heroImage}
-                  alt={post.data.title}
-                  class="recent-img"
-                />
+                {isBundledHeroImage(post.heroImage) ? (
+                  <Image
+                    width={540}
+                    height={280}
+                    src={post.heroImage}
+                    alt={post.title}
+                    class="recent-img"
+                  />
+                ) : (
+                  <img src={post.heroImage} alt={post.title} class="recent-img" />
+                )}
               </div>
             )}
             <div class="recent-content">
-              <time datetime={post.data.pubDate.toISOString()} class="recent-date">
-                {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(post.data.pubDate)}
+              <time datetime={post.pubDate} class="recent-date">
+                {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(post.pubDate))}
               </time>
-              <h3 class="recent-title">{post.data.title}</h3>
-              <p class="recent-desc">{post.data.description}</p>
+              <h3 class="recent-title">{post.title}</h3>
+              <p class="recent-desc">{post.description}</p>
               <span class="recent-more">Read article &rarr;</span>
             </div>
           </a>

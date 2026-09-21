@@ -1,8 +1,9 @@
 ---
 import { Image } from "astro:assets";
-import type { CollectionEntry } from "astro:content";
+import { isBundledHeroImage, type ArticleTemplateProps } from "../lib/article";
 
-type Props = CollectionEntry<"blog">["data"];
+/** The Article mapping in `toTemplateProps` is the only producer of these props. */
+type Props = ArticleTemplateProps;
 
 const {
   title,
@@ -81,14 +82,20 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
 
     {heroImage && (
       <div class="hero-image-wrapper">
-        <Image
-          width={1100}
-          height={550}
-          src={heroImage}
-          alt={title}
-          class="hero-img"
-          loading="eager"
-        />
+        {isBundledHeroImage(heroImage) ? (
+          /* A bundle asset the build imported: measured, so it can be optimized. */
+          <Image
+            width={1100}
+            height={550}
+            src={heroImage}
+            alt={title}
+            class="hero-img"
+            loading="eager"
+          />
+        ) : (
+          /* An editorial URL: nothing measured it, so it renders as it is. */
+          <img src={heroImage} alt={title} class="hero-img" loading="eager" />
+        )}
       </div>
     )}
 

@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import type { BlockNode, InlineSpan, Mark, MarkDef } from "../types";
 import { getBlock } from "../registry";
+import { MARK_TAG_ALIASES } from "../marks";
 
 interface TokenTag {
   type: "open" | "close" | "selfClosing";
@@ -15,21 +16,6 @@ interface TokenText {
 }
 
 type Token = TokenTag | TokenText;
-
-const INLINE_MARK_TAGS: Record<string, Mark> = {
-  bold: "bold",
-  strong: "bold",
-  b: "bold",
-  italic: "italic",
-  em: "italic",
-  i: "italic",
-  strike: "strike",
-  del: "strike",
-  s: "strike",
-  code: "code",
-  underline: "underline",
-  u: "underline",
-};
 
 /**
  * Safely parses expression values inside `{ ... }` without executing arbitrary code.
@@ -69,7 +55,11 @@ function parseJsxExpressionValue(raw: string): any {
 /**
  * Deterministic JSX DSL Tokenizer.
  */
-export function tokenizeDsl(input: string): Token[] {
+/**
+ * `report` receives what the tokenizer had to guess at — currently only an unterminated
+ * comment, which silently swallows the rest of the document.
+ */
+export function tokenizeDsl(input: string, report?: (problem: DocumentProblem) => void): Token[] {
   const tokens: Token[] = [];
   let index = 0;
   const len = input.length;
@@ -95,6 +85,12 @@ export function tokenizeDsl(input: string): Token[] {
     if (input.startsWith("<!--", index)) {
       const commentEnd = input.indexOf("-->", index + 4);
       if (commentEnd === -1) {
+        report?.({
+          severity: "unrenderable",
+          code: "unterminated-comment",
+          tagName: "<!--",
+          message: "Unterminated comment: everything after it is ignored",
+        });
         index = len; // Unterminated comment, consume all
       } else {
         index = commentEnd + 3;
@@ -228,6 +224,19 @@ interface OpenElement {
   children: (BlockNode | InlineSpan)[];
 }
 
+/** Names the props that did not match, so a message says which one to fix. */
+function describeIssues(issues: readonly v.BaseIssue<unknown>[]): string {
+  return issues
+    .map((issue) => {
+      const path = (issue.path ?? [])
+        .map((segment) => String((segment as { key?: PropertyKey }).key ?? ""))
+        .filter(Boolean)
+        .join(".");
+      return path ? `${path} ${issue.message}` : issue.message;
+    })
+    .join("; ");
+}
+
 let idCounter = 0;
 function generateNodeId(prefix = "block"): string {
   idCounter++;
@@ -235,13 +244,48 @@ function generateNodeId(prefix = "block"): string {
 }
 
 /**
- * Parses JSX DSL content into an unambiguous Notion-like BlockNode[] AST.
+ * Something the parser could not resolve.
+ *
+ * `unrenderable` means the Document Renderer can only emit a fallback wrapper for it —
+ * publishing it produces a page a reader can see is broken. `suspect` means the tag is
+ * known but its props did not match the Block's schema and the defaults were used
+ * instead, so the block renders, possibly with the wrong values.
  */
-export function parseDslToBlocks(dslContent: string): BlockNode[] {
-  if (!dslContent || !dslContent.trim()) return [];
+export type DocumentProblemSeverity = "unrenderable" | "suspect";
 
-  const tokens = tokenizeDsl(dslContent.trim());
+export type DocumentProblemCode =
+  | "unknown-block"
+  | "invalid-props"
+  | "recovered-tag"
+  | "unterminated-comment";
+
+export interface DocumentProblem {
+  severity: DocumentProblemSeverity;
+  code: DocumentProblemCode;
+  /** The tag as written, so a message can name what the author typed. */
+  tagName: string;
+  message: string;
+}
+
+export interface DocumentInspection {
+  blocks: BlockNode[];
+  problems: DocumentProblem[];
+}
+
+/**
+ * Everything the parser knows about a document, including what it could not resolve.
+ *
+ * The parser is built to recover from anything, which is right for rendering and wrong for
+ * writing: it turns an unknown tag into a block, a failed schema into the defaults, and an
+ * unclosed tag into a closed one, all without a word. Callers that must not accept a
+ * broken document ask here.
+ */
+export function inspectDocument(dslContent: string): DocumentInspection {
+  if (!dslContent || !dslContent.trim()) return { blocks: [], problems: [] };
+
   const rootBlocks: BlockNode[] = [];
+  const problems: DocumentProblem[] = [];
+  const tokens = tokenizeDsl(dslContent.trim(), (problem) => problems.push(problem));
   const stack: OpenElement[] = [];
 
   // Active inline marks stack: e.g. ["bold", "italic"]
@@ -285,8 +329,8 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
     const tagNameLower = token.name.toLowerCase();
 
     // 1. Check if token is an inline Mark (Bold, Italic, Strike, Code, Link)
-    if (INLINE_MARK_TAGS[tagNameLower]) {
-      const mark = INLINE_MARK_TAGS[tagNameLower];
+    if (MARK_TAG_ALIASES[tagNameLower]) {
+      const mark = MARK_TAG_ALIASES[tagNameLower];
       if (token.type === "open") {
         activeMarks.push(mark);
       } else if (token.type === "close") {
@@ -305,6 +349,9 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
             href: token.attrs.href || "#",
             target: token.attrs.target,
             rel: token.attrs.rel || (token.attrs.target === "_blank" ? "noopener noreferrer" : undefined),
+            // A file insertion offers its own name as the download filename; `true`
+            // means the bare `download` attribute.
+            download: token.attrs.download,
           },
         });
       } else if (token.type === "close") {
@@ -317,6 +364,16 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
     const blockDef = getBlock(token.name);
     const blockType = blockDef ? blockDef.type : tagNameLower;
 
+    // Reported once, on the tag that opens: the matching close tag would say the same thing.
+    if (!blockDef && token.type !== "close") {
+      problems.push({
+        severity: "unrenderable",
+        code: "unknown-block",
+        tagName: token.name,
+        message: `Unknown block <${token.name}>: no Block is registered for it`,
+      });
+    }
+
     // Validate props against schema if block registered
     let validatedProps: Record<string, any> = { ...token.attrs };
     if (blockDef?.schema) {
@@ -325,6 +382,14 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
         if (parsed.success) {
           validatedProps = parsed.output;
         } else {
+          problems.push({
+            severity: "suspect",
+            code: "invalid-props",
+            tagName: token.name,
+            message: `<${token.name}> does not match its schema, so the defaults are used instead: ${describeIssues(
+              parsed.issues
+            )}`,
+          });
           // Merge defaults if validation failed on optional fields
           validatedProps = { ...(blockDef.defaultProps || {}), ...token.attrs };
         }
@@ -357,7 +422,26 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
         }
       }
 
+      if (matchIdx === -1) {
+        problems.push({
+          severity: "unrenderable",
+          code: "recovered-tag",
+          tagName: token.name,
+          message: `Closing tag </${token.name}> has no opening tag, so it is ignored`,
+        });
+      }
+
       if (matchIdx !== -1) {
+        const recovered = stack.slice(matchIdx + 1).map((element) => `<${element.name}>`);
+        if (recovered.length > 0) {
+          problems.push({
+            severity: "unrenderable",
+            code: "recovered-tag",
+            tagName: token.name,
+            message: `</${token.name}> closed ${recovered.join(", ")} before it was finished`,
+          });
+        }
+
         // Pop all unclosed children up to matchIdx (error recovery)
         const closedElement = stack.splice(matchIdx, 1)[0];
         const blockNode: BlockNode = {
@@ -374,6 +458,12 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
   // Close any dangling open elements on stack (graceful error recovery)
   while (stack.length > 0) {
     const remaining = stack.pop()!;
+    problems.push({
+      severity: "unrenderable",
+      code: "recovered-tag",
+      tagName: remaining.name,
+      message: `<${remaining.name}> is never closed`,
+    });
     const blockDef = getBlock(remaining.name);
     const blockType = blockDef ? blockDef.type : remaining.name.toLowerCase();
     const node: BlockNode = {
@@ -385,5 +475,15 @@ export function parseDslToBlocks(dslContent: string): BlockNode[] {
     appendChild(node);
   }
 
-  return rootBlocks;
+  return { blocks: rootBlocks, problems };
+}
+
+/**
+ * Parses JSX DSL content into an unambiguous Notion-like BlockNode[] AST.
+ *
+ * The blocks and nothing else: a caller that needs to know how uncertain the parse was
+ * asks `inspectDocument`.
+ */
+export function parseDslToBlocks(dslContent: string): BlockNode[] {
+  return inspectDocument(dslContent).blocks;
 }

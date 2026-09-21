@@ -1,10 +1,8 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { sizeVerdictFor } from "./asset-rules";
 import type { DbClient } from "./db";
 import { assets, type Asset } from "./db";
 import type { MediaStorage } from "./media-storage";
-
-export const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
-export const MAX_NON_IMAGE_SIZE = 25 * 1024 * 1024; // 25 MB
 
 export interface RegisterAssetOptions {
   file: File;
@@ -15,8 +13,14 @@ export interface RegisterAssetOptions {
 export interface RegisterAssetResult {
   success: boolean;
   asset?: Asset;
-  snippet?: string;
   error?: string;
+}
+
+export interface UpdateAssetMetadataOptions {
+  id: string;
+  title: string;
+  altText: string;
+  description: string;
 }
 
 export interface DeleteAssetOptions {
@@ -57,15 +61,10 @@ export async function registerAsset(options: RegisterAssetOptions): Promise<Regi
     return { success: false, error: "No file provided" };
   }
 
-  const isImage = file.type.startsWith("image/");
-  const maxAllowedSize = isImage ? MAX_IMAGE_SIZE : MAX_NON_IMAGE_SIZE;
-  const maxAllowedLabel = isImage ? "2 MB" : "25 MB";
-
-  if (file.size > maxAllowedSize) {
-    return {
-      success: false,
-      error: `File size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds the ${maxAllowedLabel} limit.`,
-    };
+  // The same verdict the browser shows before it spends a request.
+  const verdict = sizeVerdictFor({ mimeType: file.type, byteSize: file.size, filename: file.name });
+  if (!verdict.ok) {
+    return { success: false, error: verdict.reason };
   }
 
   const originalName = file.name || "upload.bin";
@@ -107,15 +106,39 @@ export async function registerAsset(options: RegisterAssetOptions): Promise<Regi
 
   await db.insert(assets).values(newAsset);
 
-  const snippet = isImage
-    ? `![${fallbackTitle}](${url})`
-    : `<a href="${url}" download="${originalName}">${originalName}</a>`;
-
+  // No insertion text here: the Asset Insertion module owns that spelling, and this
+  // module's job ends at the record and the bytes.
   return {
     success: true,
     asset: newAsset,
-    snippet,
   };
+}
+
+/**
+ * The Asset Library listing, newest first. The only read of the `assets` table, so a page
+ * never writes its own query against the registry.
+ */
+export async function listAssets(db: DbClient): Promise<Asset[]> {
+  return db.select().from(assets).orderBy(desc(assets.createdAt));
+}
+
+/** The metadata an editor owns, leaving bytes and identifiers alone. */
+export async function updateAssetMetadata(
+  db: DbClient,
+  options: UpdateAssetMetadataOptions
+): Promise<DeleteAssetResult> {
+  const { id, title, altText, description } = options;
+
+  if (!id) {
+    return { success: false, error: "Missing asset ID" };
+  }
+
+  await db
+    .update(assets)
+    .set({ title, altText, description, updatedAt: new Date().toISOString() })
+    .where(eq(assets.id, id));
+
+  return { success: true };
 }
 
 /**

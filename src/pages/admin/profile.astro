@@ -3,14 +3,15 @@ export const prerender = false;
 
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { eq, sql } from "drizzle-orm";
-import { getDb, users, posts, sessions } from "../../lib/db";
+import { users, posts, sessions } from "../../lib/db";
+import { createServices } from "../../lib/services";
 
 const user = Astro.locals.user;
 if (!user) {
   return Astro.redirect("/admin/login");
 }
 
-const db = getDb(Astro.locals);
+const { db } = createServices(Astro.locals);
 
 // Fetch user account details
 const [userRecord] = await db

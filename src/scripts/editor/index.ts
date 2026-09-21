@@ -1,9 +1,19 @@
 import { EditorView, basicSetup } from "codemirror";
+import { Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
+import { EditorSession } from "./editor-session";
+import { EditorDomAdapter } from "./dom-adapter";
 import { LockManager } from "./lock-manager";
-import { SaveWorkflow } from "./save-workflow";
 import { ModalController } from "./modal-controller";
+import { actionChange, actionFor } from "./actions";
 
+/**
+ * What the Editor needs handed to it to start, and nothing more.
+ *
+ * The metadata fields are server-rendered into the Settings Panel, so they are read from
+ * the DOM rather than shipped a second time in this payload — the copy that used to sit
+ * here was never read, and keeping it in step was a standing invitation to drift.
+ */
 export interface EditorInitData {
   post: {
     id: string;
@@ -16,236 +26,145 @@ export interface EditorInitData {
   assets: any[];
 }
 
+const themeConfig = EditorView.theme({
+  "&": {
+    height: "100%",
+    fontSize: "15px",
+    color: "var(--text-primary)",
+    backgroundColor: "var(--bg-surface)",
+  },
+  ".cm-scroller": {
+    overflow: "auto",
+    fontFamily: "var(--font-mono)",
+    lineHeight: "1.65",
+  },
+  ".cm-content": {
+    padding: "24px 32px",
+    maxWidth: "960px",
+    margin: "0 auto",
+  },
+  ".cm-line": {
+    padding: "0",
+  },
+  "&.cm-focused .cm-cursor": {
+    borderLeftColor: "var(--primary)",
+    borderLeftWidth: "2px",
+  },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgba(79, 70, 229, 0.18)",
+  },
+  ".cm-gutters": {
+    backgroundColor: "var(--bg-surface-elevated)",
+    color: "var(--text-muted)",
+    borderRight: "1px solid var(--border-subtle)",
+    paddingRight: "8px",
+  },
+});
+
 export function initEditor(data: EditorInitData): void {
   const { post, assets } = data;
   const container = document.getElementById("codemirror-container");
   if (!container) return;
 
-  const postImageField = document.getElementById("post-image-field") as HTMLInputElement;
+  // The session holds the state. Adapters below supply what it cannot know: the body,
+  // the metadata fields, the network call, and the lock conversation.
+  const session = new EditorSession({
+    postId: post.id,
+    initialSlug: post.slug,
+    initialStatus: post.status || "draft",
+    initialReadOnly: Boolean(post.isInitiallyLocked),
+    initialLockedBy: post.lockUser,
+    readContent: () => editorView.state.doc.toString(),
+    readMetadata: () => dom.readMetadata(),
+    persist: async (payload) => {
+      const res = await fetch("/api/admin/posts/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json()) as any;
 
-  // CodeMirror Theme
-  const themeConfig = EditorView.theme({
-    "&": {
-      height: "100%",
-      fontSize: "15px",
-      color: "var(--text-primary)",
-      backgroundColor: "var(--bg-surface)",
-    },
-    ".cm-scroller": {
-      overflow: "auto",
-      fontFamily: "var(--font-mono)",
-      lineHeight: "1.65",
-    },
-    ".cm-content": {
-      padding: "24px 32px",
-      maxWidth: "960px",
-      margin: "0 auto",
-    },
-    ".cm-line": {
-      padding: "0",
-    },
-    "&.cm-focused .cm-cursor": {
-      borderLeftColor: "var(--primary)",
-      borderLeftWidth: "2px",
-    },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-      backgroundColor: "rgba(79, 70, 229, 0.18)",
-    },
-    ".cm-gutters": {
-      backgroundColor: "var(--bg-surface-elevated)",
-      color: "var(--text-muted)",
-      borderRight: "1px solid var(--border-subtle)",
-      paddingRight: "8px",
+      return {
+        ok: Boolean(body.success),
+        status: res.status,
+        lockedBy: body.lockedBy,
+        slug: body.slug,
+        statusState: body.statusState,
+        message: body.message,
+        error: body.error,
+      };
     },
   });
 
-  let saveWorkflowRef: SaveWorkflow | null = null;
-  let lockManagerRef: LockManager | null = null;
+  const editableCompartment = new Compartment();
 
-  // Initialize CodeMirror EditorView
   const editorView = new EditorView({
     doc: post.content_mdx || "",
     extensions: [
       basicSetup,
       markdown(),
       EditorView.lineWrapping,
-      EditorView.editable.of(!Boolean(post.isInitiallyLocked)),
+      editableCompartment.of(EditorView.editable.of(!session.isReadOnly)),
       themeConfig,
       EditorView.updateListener.of((update) => {
-        if (update.docChanged && !lockManagerRef?.getReadOnly()) {
-          saveWorkflowRef?.markDirty();
-        }
+        if (update.docChanged) session.markDirty();
       }),
     ],
     parent: container,
   });
 
-  // Lock Manager
-  lockManagerRef = new LockManager({
+  // CodeMirror adapter: read-only reaches the document itself, so a lock conflict
+  // actually stops typing.
+  session.subscribe((snapshot) => {
+    editorView.dispatch({
+      effects: editableCompartment.reconfigure(EditorView.editable.of(!snapshot.readOnly)),
+    });
+  });
+
+  // DOM adapter: reads the metadata fields, renders the chrome, owns beforeunload
+  const dom = new EditorDomAdapter(session, post.id);
+
+  // Lock client adapter: heartbeat, instant release, and conflict reports
+  new LockManager({
     postId: post.id,
-    isInitiallyLocked: Boolean(post.isInitiallyLocked),
+    initiallyLocked: Boolean(post.isInitiallyLocked),
     lockUser: post.lockUser,
-    onReadOnlyChanged: (isReadOnly) => {
-      editorView.dispatch({
-        effects: [],
-      });
-    },
+    onConflict: (lockedBy) => session.lockConflict(lockedBy),
+    isReadOnly: () => session.isReadOnly,
   });
 
-  // Save Workflow
-  saveWorkflowRef = new SaveWorkflow({
-    postId: post.id,
-    initialSlug: post.slug,
-    initialStatus: post.status || "draft",
-    getContentMdx: () => editorView.state.doc.toString(),
-    isReadOnly: () => lockManagerRef?.getReadOnly() ?? false,
-    onLockConflict: (errorMsg) => {
-      lockManagerRef?.setReadOnly(errorMsg);
-    },
-  });
+  /**
+   * Applies a toolbar action: the insertion and the caret both come from the action list,
+   * so this function has no spelling or offset of its own to get wrong.
+   */
+  function applyFormatting(tool: string): void {
+    const action = actionFor(tool);
+    if (!action) return;
 
-  // Formatting helper
-  function applyFormatting(tool: string) {
     const selection = editorView.state.selection.main;
-    const hasSelection = !selection.empty;
     const selectedText = editorView.state.sliceDoc(selection.from, selection.to);
-
-    let insertText = "";
-    let newAnchor = selection.from;
-    let newHead = selection.from;
-
-    switch (tool) {
-      case "bold":
-        if (hasSelection) {
-          insertText = `<Bold>${selectedText}</Bold>`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `<Bold></Bold>`;
-          newAnchor = selection.from + 6;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "italic":
-        if (hasSelection) {
-          insertText = `<Italic>${selectedText}</Italic>`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `<Italic></Italic>`;
-          newAnchor = selection.from + 8;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "strike":
-        if (hasSelection) {
-          insertText = `<Strike>${selectedText}</Strike>`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `<Strike></Strike>`;
-          newAnchor = selection.from + 8;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "link":
-        if (hasSelection) {
-          insertText = `<Link href="https://">${selectedText}</Link>`;
-          newAnchor = selection.from + 13;
-          newHead = newAnchor;
-        } else {
-          insertText = `<Link href="https://">link text</Link>`;
-          newAnchor = selection.from + 13;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "h1":
-      case "h2":
-      case "h3":
-      case "h4":
-      case "h5":
-      case "h6": {
-        const level = parseInt(tool.replace("h", ""), 10);
-        if (hasSelection) {
-          insertText = `\n<Heading level={${level}}>${selectedText}</Heading>\n`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `\n<Heading level={${level}}>Heading Title</Heading>\n`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        }
-        break;
-      }
-
-      case "quote":
-        if (hasSelection) {
-          insertText = `\n<Quote>\n  <Paragraph>${selectedText}</Paragraph>\n</Quote>\n`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `\n<Quote>\n  <Paragraph>Quote text</Paragraph>\n</Quote>\n`;
-          newAnchor = selection.from + 22;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "code":
-        if (hasSelection) {
-          insertText = `\n<CodeBlock lang="typescript">\n  ${selectedText}\n</CodeBlock>\n`;
-          newAnchor = selection.from + insertText.length;
-          newHead = newAnchor;
-        } else {
-          insertText = `\n<CodeBlock lang="typescript">\n  // Code here\n</CodeBlock>\n`;
-          newAnchor = selection.from + 33;
-          newHead = newAnchor;
-        }
-        break;
-
-      case "bullet":
-        if (hasSelection) {
-          insertText = `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>${selectedText}</Paragraph>\n  </ListItem>\n</List>\n`;
-          newAnchor = selection.from + insertText.length;
-        } else {
-          insertText = `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>First point</Paragraph>\n  </ListItem>\n</List>\n`;
-          newAnchor = selection.from + insertText.length;
-        }
-        newHead = newAnchor;
-        break;
-
-      case "numbered":
-        if (hasSelection) {
-          insertText = `\n<List type="ordered">\n  <ListItem>\n    <Paragraph>${selectedText}</Paragraph>\n  </ListItem>\n</List>\n`;
-          newAnchor = selection.from + insertText.length;
-        } else {
-          insertText = `\n<List type="ordered">\n  <ListItem>\n    <Paragraph>Step 1</Paragraph>\n  </ListItem>\n</List>\n`;
-          newAnchor = selection.from + insertText.length;
-        }
-        newHead = newAnchor;
-        break;
-    }
+    const change = actionChange(action, selectedText);
 
     editorView.dispatch({
-      changes: { from: selection.from, to: selection.to, insert: insertText },
-      selection: { anchor: newAnchor, head: newHead },
+      changes: { from: selection.from, to: selection.to, insert: change.insert },
+      selection: {
+        anchor: selection.from + change.caret.start,
+        head: selection.from + change.caret.end,
+      },
     });
     editorView.focus();
-    saveWorkflowRef?.markDirty();
+    session.markDirty();
   }
 
   // Snippet inserter
-  function insertSnippet(snippet: string) {
+  function insertSnippet(snippet: string): void {
     const { from, to } = editorView.state.selection.main;
     editorView.dispatch({
       changes: { from, to, insert: snippet },
       selection: { anchor: from + snippet.length },
     });
     editorView.focus();
-    saveWorkflowRef?.markDirty();
+    session.markDirty();
   }
 
   // Modal Controller
@@ -253,11 +172,6 @@ export function initEditor(data: EditorInitData): void {
     initialAssets: assets,
     insertSnippet,
     applyFormatting,
-    onAssetPickedForHero: (url) => {
-      if (postImageField) {
-        postImageField.value = url;
-        saveWorkflowRef?.markDirty();
-      }
-    },
+    onAssetPickedForHero: (url) => dom.setFeaturedImage(url),
   });
 }

@@ -1,6 +1,6 @@
 import { defineMiddleware } from "astro:middleware";
 import { validateSession } from "./lib/session";
-import { getDb } from "./lib/db";
+import { createServices } from "./lib/services";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
@@ -18,7 +18,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const token = context.cookies.get("admin_session")?.value;
     if (token) {
       try {
-        const db = getDb(context.locals);
+        const { db } = createServices(context.locals);
         const user = await validateSession(db, token);
         if (user) {
           return context.redirect("/admin/posts");
@@ -42,7 +42,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   try {
-    const db = getDb(context.locals);
+    const { db } = createServices(context.locals);
     const user = await validateSession(db, token);
     if (!user) {
       context.cookies.delete("admin_session", { path: "/" });

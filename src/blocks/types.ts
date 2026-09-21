@@ -1,4 +1,5 @@
 import type * as v from "valibot";
+import type { ArticleReadModel } from "../lib/article";
 
 export type Mark = "bold" | "italic" | "strike" | "code" | "underline";
 
@@ -23,7 +24,8 @@ export interface BlockNode<TProps = Record<string, any>> {
 }
 
 export interface BlockRenderContext {
-  db?: any;
+  /** Article reads for blocks that need other Articles (e.g. RelatedPosts). */
+  articles?: ArticleReadModel;
   post?: {
     id?: string;
     slug?: string;
@@ -40,6 +42,11 @@ export interface SchemaEntity {
   "@type": string;
   "@id"?: string;
   [key: string]: any;
+}
+
+export interface EditorInsertion {
+  label: string;
+  snippet: string;
 }
 
 export interface BlockDefinition<TProps = any, TData = any> {
@@ -66,6 +73,12 @@ export interface BlockDefinition<TProps = any, TData = any> {
 
   /** Default JSX snippet template for editor insertion */
   snippet: string;
+
+  /**
+   * Additional insertions the drawer offers for this block, each a labelled snippet
+   * (e.g. one per Callout variant). When absent, the drawer offers `snippet` alone.
+   */
+  insertions?: EditorInsertion[];
 
   /** Whether this block supports CSS breakout stretch ("default" | "wide" | "full" | custom) */
   supportsStretch?: boolean;

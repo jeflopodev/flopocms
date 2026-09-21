@@ -1,42 +1,19 @@
 export const prerender = false;
 
-import type { APIRoute } from "astro";
-import { getDb } from "../../../../lib/db";
-import { getMediaStorage } from "../../../../lib/media-storage";
+import { adminRoute, readJson } from "../../../../lib/admin-route";
 import { deleteAsset } from "../../../../lib/asset-registry";
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  try {
-    const db = getDb(locals);
-    const body = (await request.json()) as { id?: string };
-    const { id } = body;
+export const POST = adminRoute(async ({ request, services }) => {
+  const raw = await readJson(request);
+  if (!raw.ok) return { success: false, status: 400, error: raw.error };
 
-    if (!id) {
-      return new Response(JSON.stringify({ success: false, error: "Missing asset ID" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+  const { id } = raw.value as { id?: string };
+  if (!id) return { success: false, status: 400, error: "Missing asset ID" };
 
-    const storage = getMediaStorage(locals);
-    const result = await deleteAsset({ id, db, storage });
-
-    if (!result.success) {
-      return new Response(JSON.stringify({ success: false, error: result.error || "Asset not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ success: true, message: "Asset deleted successfully" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Delete asset error:", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || "Failed to delete asset" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+  const result = await deleteAsset({ id, db: services.db, storage: services.media });
+  if (!result.success) {
+    return { success: false, status: 404, error: result.error || "Asset not found" };
   }
-};
+
+  return { success: true, message: "Asset deleted successfully" };
+});

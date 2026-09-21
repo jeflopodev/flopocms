@@ -14,21 +14,23 @@
     "check:images": "node scripts/check-image-sizes.mjs",
     "deploy": "astro build && wrangler deploy",
     "create-user": "node scripts/create-user.mjs",
-    "db:reconcile": "node scripts/reconcile-content.mjs",
+    "review:collect": "node scripts/collect-article-snapshot.mjs",
+    "db:dump": "node scripts/dump-d1-posts.mjs",
+    "check:divergence": "vitest run src/lib/article-divergence.test.ts",
     "d1:migrate": "wrangler d1 migrations apply DB",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "db:studio:remote": "drizzle-kit studio",
-    "typecheck": "astro sync && tsc --noEmit"
+    "typecheck": "astro sync && tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
     "@astrojs/cloudflare": "^14.3.1",
-    "@astrojs/markdown-satteri": "^0.4.1",
     "@astrojs/mdx": "^8.0.1",
     "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/state": "^6.7.5",
     "astro": "^7.3.2",
-    "astro-auto-import": "^0.6.0",
     "codemirror": "^6.0.2",
     "drizzle-orm": "1.0.0-rc.4",
     "sharp": "^0.35.4",
@@ -44,6 +46,7 @@
     "@cloudflare/workers-types": "^5.20260916.1",
     "@types/node": "^22.20.3",
     "drizzle-kit": "1.0.0-rc.4",
+    "vitest": "^5.0.1",
     "wrangler": "^4.132.0"
   }
 }

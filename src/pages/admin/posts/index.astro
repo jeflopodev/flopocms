@@ -2,16 +2,12 @@
 export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { desc } from "drizzle-orm";
-import { getDb, posts as postsTable, type Post } from "../../../lib/db";
+import { createServices } from "../../../lib/services";
+import type { PostRecord } from "../../../lib/post-store";
 
-const db = getDb(Astro.locals);
-
-// Fetch posts from D1
-const posts: Post[] = await db
-  .select()
-  .from(postsTable)
-  .orderBy(desc(postsTable.updatedAt));
+// The composition root: this page names no store and writes no query.
+const services = createServices(Astro.locals);
+const posts: PostRecord[] = await services.posts.list();
 ---
 
 <AdminLayout title="Articles" activeTab="posts">
@@ -43,8 +39,8 @@ const posts: Post[] = await db
               <polyline points="14 2 14 8 20 8"/>
             </svg>
           </div>
-          <h3>No articles found in D1</h3>
-          <p>Get started by creating your first article draft.</p>
+          <h3>No Articles yet</h3>
+          <p>Get started by creating your first Article draft.</p>
           <a href="/admin/posts/new" class="btn btn-primary">Create Article</a>
         </div>
       ) : (
@@ -86,7 +82,7 @@ const posts: Post[] = await db
                       month: "short",
                       day: "numeric",
                       year: "numeric",
-                    }).format(new Date(post.updatedAt || post.createdAt || (post as any).updated_at))}
+                    }).format(new Date(post.updatedAt || post.createdAt))}
                   </td>
                   <td class="actions-cell">
                     <div class="action-buttons">

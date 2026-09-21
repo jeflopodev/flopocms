@@ -1,23 +1,27 @@
+/**
+ * Lock client adapter.
+ *
+ * Owns the Concurrency Lock conversation with the server: renewing it on a heartbeat
+ * and releasing it the moment the editor leaves. It reports what it learns to the
+ * Editor Session and renders nothing — the DOM adapter draws the banner from the
+ * session's snapshot.
+ */
+
 export interface LockManagerOptions {
   postId: string;
-  isInitiallyLocked: boolean;
+  initiallyLocked: boolean;
   lockUser?: string;
-  onReadOnlyChanged: (isReadOnly: boolean, lockedBy: string) => void;
+  /** The Concurrency Lock is held by someone else. */
+  onConflict: (lockedBy?: string) => void;
+  isReadOnly: () => boolean;
 }
 
 export class LockManager {
-  private postId: string;
-  private isReadOnly: boolean;
   private heartbeatTimer: any = null;
-  private onReadOnlyChanged: (isReadOnly: boolean, lockedBy: string) => void;
 
-  constructor(options: LockManagerOptions) {
-    this.postId = options.postId;
-    this.isReadOnly = options.isInitiallyLocked;
-    this.onReadOnlyChanged = options.onReadOnlyChanged;
-
-    if (this.isReadOnly) {
-      this.setReadOnly(options.lockUser || "another editor");
+  constructor(private readonly options: LockManagerOptions) {
+    if (options.initiallyLocked) {
+      options.onConflict(options.lockUser);
     } else {
       this.startHeartbeat();
     }
@@ -25,47 +29,15 @@ export class LockManager {
     this.registerExitHandlers();
   }
 
-  public getReadOnly(): boolean {
-    return this.isReadOnly;
-  }
-
-  public setReadOnly(lockedBy: string): void {
-    this.isReadOnly = true;
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
-
-    const banner = document.getElementById("lock-warning-banner");
-    const bannerText = document.getElementById("lock-warning-text");
-    if (banner) banner.classList.remove("hidden");
-    if (bannerText) {
-      bannerText.textContent = `Article is currently being edited by @${lockedBy}. You are in Read-Only mode.`;
-    }
-
-    const disableIds = [
-      "manual-save-btn",
-      "topbar-status-select",
-      "topbar-title-input",
-      "post-status-select",
-    ];
-    disableIds.forEach((id) => {
-      const el = document.getElementById(id) as HTMLInputElement | HTMLButtonElement | HTMLSelectElement;
-      if (el) el.disabled = true;
-    });
-
-    this.onReadOnlyChanged(true, lockedBy);
-  }
-
   public startHeartbeat(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = setInterval(async () => {
-      if (this.isReadOnly) return;
+      if (this.options.isReadOnly()) return;
       try {
         await fetch("/api/admin/posts/lock", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId: this.postId, action: "renew" }),
+          body: JSON.stringify({ postId: this.options.postId, action: "renew" }),
         });
       } catch (err) {
         console.warn("Lock heartbeat error:", err);
@@ -74,8 +46,8 @@ export class LockManager {
   }
 
   public releaseLockImmediately(): void {
-    if (this.isReadOnly) return;
-    const releaseUrl = `/api/admin/posts/lock?postId=${encodeURIComponent(this.postId)}&action=release`;
+    if (this.options.isReadOnly()) return;
+    const releaseUrl = `/api/admin/posts/lock?postId=${encodeURIComponent(this.options.postId)}&action=release`;
     if (navigator.sendBeacon) {
       navigator.sendBeacon(releaseUrl);
     } else {

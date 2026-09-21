@@ -19,6 +19,13 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/** The `download` attribute of a link: absent, bare, or naming the file. */
+function formatDownloadAttr(value: unknown): string {
+  if (value === undefined || value === null || value === false || value === "") return "";
+  if (value === true) return " download";
+  return ` download="${escapeHtml(String(value))}"`;
+}
+
 function renderInlineSpans(
   children: (BlockNode | InlineSpan)[],
   serverDataMap: Map<string, any>,
@@ -44,10 +51,11 @@ function renderInlineSpans(
 
       for (const def of markDefs) {
         if (def.type === "link") {
-          const href = def.attrs?.href || "#";
-          const target = def.attrs?.target ? ` target="${def.attrs.target}"` : "";
-          const rel = def.attrs?.rel ? ` rel="${def.attrs.rel}"` : "";
-          text = `<a href="${href}"${target}${rel} class="prose-link">${text}</a>`;
+          const href = escapeHtml(def.attrs?.href || "#");
+          const target = def.attrs?.target ? ` target="${escapeHtml(String(def.attrs.target))}"` : "";
+          const rel = def.attrs?.rel ? ` rel="${escapeHtml(String(def.attrs.rel))}"` : "";
+          const download = formatDownloadAttr(def.attrs?.download);
+          text = `<a href="${href}"${target}${rel}${download} class="prose-link">${text}</a>`;
         }
       }
 

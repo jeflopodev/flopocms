@@ -1,7 +1,5 @@
-import { eq, and, ne, desc } from "drizzle-orm";
 import type { BlockDefinition, BlockRenderContext } from "../types";
 import { relatedPostsSchema, type RelatedPostsProps } from "./schema";
-import { posts as postsTable } from "../../db/schema";
 
 export * from "./schema";
 
@@ -22,51 +20,22 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
   defaultProps: { limit: 3, title: "Related Articles" },
   snippet: `<RelatedPosts category="General" limit={3} />`,
   loadServerData: async (props, ctx: BlockRenderContext) => {
-    if (!ctx.db) return [];
-    const numLimit = Number(props.limit) || 3;
-    const currentSlug = props.currentSlug || ctx.post?.slug;
-    const category = props.category || ctx.post?.category;
+    // Reads go through the Article Read Model, never a direct query against a store.
+    const articles = ctx.articles;
+    if (!articles) return [];
 
-    try {
-      if (category) {
-        return await ctx.db
-          .select({
-            slug: postsTable.slug,
-            title: postsTable.title,
-            category: postsTable.category,
-            description: postsTable.description,
-          })
-          .from(postsTable)
-          .where(
-            and(
-              eq(postsTable.status, "published"),
-              eq(postsTable.category, category),
-              currentSlug ? ne(postsTable.slug, currentSlug) : undefined
-            )
-          )
-          .orderBy(desc(postsTable.pubDate))
-          .limit(numLimit);
-      } else {
-        return await ctx.db
-          .select({
-            slug: postsTable.slug,
-            title: postsTable.title,
-            category: postsTable.category,
-            description: postsTable.description,
-          })
-          .from(postsTable)
-          .where(
-            and(
-              eq(postsTable.status, "published"),
-              currentSlug ? ne(postsTable.slug, currentSlug) : undefined
-            )
-          )
-          .orderBy(desc(postsTable.pubDate))
-          .limit(numLimit);
-      }
-    } catch {
-      return [];
-    }
+    const related = await articles.listRelated({
+      category: props.category || ctx.post?.category,
+      excludeSlug: props.currentSlug || ctx.post?.slug,
+      limit: Number(props.limit) || 3,
+    });
+
+    return related.map((article) => ({
+      slug: article.slug,
+      title: article.title,
+      category: article.category,
+      description: article.description,
+    }));
   },
   render: (props, _childrenHtml, data, ctx) => {
     const list = data || [];

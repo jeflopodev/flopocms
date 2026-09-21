@@ -1,51 +1,19 @@
 export const prerender = false;
 
-import type { APIRoute } from "astro";
-import { getDb } from "../../../../lib/db";
+import { adminRoute, readJson } from "../../../../lib/admin-route";
 import { deletePostLifecycle } from "../../../../lib/post-lifecycle";
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  try {
-    const user = locals.user;
-    if (!user) {
-      return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+export const POST = adminRoute(async ({ request, services }) => {
+  const raw = await readJson(request);
+  if (!raw.ok) return { success: false, status: 400, error: raw.error };
 
-    const db = getDb(locals);
-    const body = (await request.json()) as { id?: string };
-    const { id } = body;
+  const { id } = raw.value as { id?: string };
+  if (!id) return { success: false, status: 400, error: "Missing post ID" };
 
-    if (!id) {
-      return new Response(JSON.stringify({ success: false, error: "Missing post ID" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const result = await deletePostLifecycle({ id, db, locals });
-
-    if (!result.success) {
-      return new Response(JSON.stringify({ success: false, error: result.error || "Failed to delete post" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ success: true, deletedFromGitHub: result.deletedFromGitHub }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("Delete post error:", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || "Failed to delete post" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+  const result = await deletePostLifecycle({ id, services });
+  if (!result.success) {
+    return { success: false, status: 400, error: result.error || "Failed to delete post" };
   }
-};
+
+  return { success: true, deletedFromGitHub: result.deletedFromGitHub };
+});

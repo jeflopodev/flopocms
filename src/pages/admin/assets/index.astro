@@ -2,23 +2,22 @@
 export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { desc } from "drizzle-orm";
-import { getDb, assets as assetsTable, type Asset } from "../../../lib/db";
+import { assetLibrarySummary } from "../../../lib/asset-library";
+import { listAssets } from "../../../lib/asset-registry";
+import { createServices } from "../../../lib/services";
+import { type Asset } from "../../../lib/db";
 
-const db = getDb(Astro.locals);
+const services = createServices(Astro.locals);
 
 let assets: Asset[] = [];
 try {
-  assets = await db.select().from(assetsTable).orderBy(desc(assetsTable.createdAt));
+  assets = await listAssets(services.db);
 } catch (err) {
   console.error("Fetch assets error:", err);
 }
 
-const totalBytes = assets.reduce((sum, a) => sum + (a.byteSize || 0), 0);
-const formattedTotalSize =
-  totalBytes > 1024 * 1024
-    ? `${(totalBytes / (1024 * 1024)).toFixed(2)} MB`
-    : `${(totalBytes / 1024).toFixed(1)} KB`;
+// The same figures the client renders the grid from, so "Total Weight" means one thing.
+const library = assetLibrarySummary(assets);
 ---
 
 <AdminLayout title="Asset Registry" activeTab="assets" fullWidth={true}>
@@ -34,11 +33,11 @@ const formattedTotalSize =
 
       <div class="header-stats">
         <div class="stat-pill">
-          <span class="stat-num">{assets.length}</span>
+          <span class="stat-num">{library.total}</span>
           <span class="stat-label">Total Assets</span>
         </div>
         <div class="stat-pill">
-          <span class="stat-num">{formattedTotalSize}</span>
+          <span class="stat-num">{library.totalLabel}</span>
           <span class="stat-label">Total Weight</span>
         </div>
       </div>
@@ -74,6 +73,7 @@ const formattedTotalSize =
             <div id="upload-progress-bar" class="progress-bar-fill"></div>
           </div>
           <span id="upload-progress-text" class="progress-text">Uploading...</span>
+          <ul id="upload-queue-list" class="upload-queue-list"></ul>
         </div>
       </div>
     </section>
@@ -224,6 +224,17 @@ const formattedTotalSize =
 </AdminLayout>
 
 <script>
+  import { insertionForAsset } from "../../../blocks/insertion";
+  import {
+    EMPTY_FILTER_MESSAGE,
+    assetCard,
+    assetLibraryView,
+    type AssetSort,
+    type AssetTypeFilter,
+    type MediaKind,
+  } from "../../../lib/asset-library";
+  import { createUploadQueue, postAssetFile, type UploadItem } from "../../../lib/upload-queue";
+
   interface AssetData {
     id: string;
     filename: string;
@@ -273,68 +284,54 @@ const formattedTotalSize =
   const metadataForm = document.getElementById("metadata-form");
   const deleteAssetBtn = document.getElementById("delete-asset-btn");
 
-  let activeTypeFilter = "all";
+  let activeTypeFilter: AssetTypeFilter = "all";
   let activeSearchQuery = "";
-  let activeSort = "newest";
+  let activeSort: AssetSort = "newest";
   let currentSelectedAsset: AssetData | null = null;
 
-  function formatBytes(bytes: number) {
-    if (!bytes) return "0 KB";
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-    return `${(bytes / 1024).toFixed(1)} KB`;
+  /** The card preview. Which element a kind gets is the page's business; the kind is not. */
+  function previewFor(kind: MediaKind, asset: AssetData, altText: string): string {
+    if (kind === "image") {
+      return `<img src="${asset.url}" alt="${altText}" loading="lazy" class="card-thumb-img" />`;
+    }
+
+    if (kind === "video") {
+      return `
+        <div class="card-icon-preview video">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span class="preview-type-badge">VIDEO</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="card-icon-preview document">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <span class="preview-type-badge">DOC</span>
+      </div>
+    `;
   }
 
   function renderGrid() {
     if (!grid) return;
 
-    // Filter
-    let filtered = allAssets.filter((a) => {
-      // Type filter
-      if (activeTypeFilter === "image" && !a.mimeType.startsWith("image/")) return false;
-      if (activeTypeFilter === "video" && !a.mimeType.startsWith("video/")) return false;
-      if (
-        activeTypeFilter === "document" &&
-        (a.mimeType.startsWith("image/") || a.mimeType.startsWith("video/"))
-      ) {
-        return false;
-      }
-
-      // Search filter
-      if (activeSearchQuery) {
-        const q = activeSearchQuery.toLowerCase();
-        const matchesName = a.filename.toLowerCase().includes(q);
-        const matchesTitle = (a.title || "").toLowerCase().includes(q);
-        const matchesAlt = (a.altText || "").toLowerCase().includes(q);
-        if (!matchesName && !matchesTitle && !matchesAlt) return false;
-      }
-
-      return true;
+    // Which Assets are shown, in which order, and what each card says: the view model
+    // decides all of it, so the rules are testable without a browser.
+    const cards = assetLibraryView(allAssets, {
+      query: activeSearchQuery,
+      type: activeTypeFilter,
+      sort: activeSort,
     });
 
-    // Sort
-    filtered.sort((a, b) => {
-      if (activeSort === "newest") {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (activeSort === "oldest") {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
-      if (activeSort === "largest") {
-        return b.byteSize - a.byteSize;
-      }
-      if (activeSort === "smallest") {
-        return a.byteSize - b.byteSize;
-      }
-      if (activeSort === "alpha") {
-        return a.filename.localeCompare(b.filename);
-      }
-      return 0;
-    });
-
-    if (filtered.length === 0) {
+    if (cards.length === 0) {
       grid.innerHTML = `
         <div class="empty-filtered-card">
-          <p>No assets match the selected filter criteria.</p>
+          <p>${EMPTY_FILTER_MESSAGE}</p>
         </div>
       `;
       return;
@@ -342,56 +339,34 @@ const formattedTotalSize =
 
     grid.innerHTML = "";
 
-    for (const asset of filtered) {
-      const card = document.createElement("div");
-      card.className = "asset-card";
-      card.dataset.id = asset.id;
+    for (const card of cards) {
+      const asset = allAssets.find((candidate) => candidate.id === card.id);
+      if (!asset) continue;
 
-      const isImg = asset.mimeType.startsWith("image/");
-      const isVid = asset.mimeType.startsWith("video/");
+      const element = document.createElement("div");
+      element.className = "asset-card";
+      element.dataset.id = card.id;
 
-      let previewHtml = "";
-      if (isImg) {
-        previewHtml = `<img src="${asset.url}" alt="${asset.altText || asset.filename}" loading="lazy" class="card-thumb-img" />`;
-      } else if (isVid) {
-        previewHtml = `
-          <div class="card-icon-preview video">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            <span class="preview-type-badge">VIDEO</span>
-          </div>
-        `;
-      } else {
-        previewHtml = `
-          <div class="card-icon-preview document">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span class="preview-type-badge">DOC</span>
-          </div>
-        `;
-      }
-
-      card.innerHTML = `
-        <div class="card-thumb">${previewHtml}</div>
+      element.innerHTML = `
+        <div class="card-thumb">${previewFor(card.kind, asset, card.altText)}</div>
         <div class="card-details">
-          <div class="card-filename" title="${asset.filename}">${asset.filename}</div>
+          <div class="card-filename" title="${card.filename}">${card.filename}</div>
           <div class="card-meta">
-            <span class="size-pill">${formatBytes(asset.byteSize)}</span>
-            <span class="date-pill">${new Date(asset.createdAt).toLocaleDateString()}</span>
+            <span class="size-pill">${card.sizeLabel}</span>
+            <span class="date-pill">${card.dateLabel}</span>
           </div>
         </div>
       `;
 
-      card.addEventListener("click", () => openAssetModal(asset));
-      grid.appendChild(card);
+      element.addEventListener("click", () => openAssetModal(asset));
+      grid.appendChild(element);
     }
   }
 
   function openAssetModal(asset: AssetData) {
     currentSelectedAsset = asset;
+    const card = assetCard(asset);
+
     if (modalFilename) modalFilename.textContent = asset.filename;
     if (editAssetId) editAssetId.value = asset.id;
     if (editTitle) editTitle.value = asset.title || "";
@@ -399,13 +374,13 @@ const formattedTotalSize =
     if (editDesc) editDesc.value = asset.description || "";
     if (metaUrl) metaUrl.textContent = asset.url;
     if (metaMime) metaMime.textContent = asset.mimeType;
-    if (metaSize) metaSize.textContent = formatBytes(asset.byteSize);
-    if (metaDate) metaDate.textContent = new Date(asset.createdAt).toLocaleString();
+    if (metaSize) metaSize.textContent = card.sizeLabel;
+    if (metaDate) metaDate.textContent = card.dateTimeLabel;
 
     if (modalPreviewTarget) {
-      if (asset.mimeType.startsWith("image/")) {
-        modalPreviewTarget.innerHTML = `<img src="${asset.url}" alt="${asset.altText || asset.filename}" class="modal-hero-img" />`;
-      } else if (asset.mimeType.startsWith("video/")) {
+      if (card.kind === "image") {
+        modalPreviewTarget.innerHTML = `<img src="${asset.url}" alt="${card.altText}" class="modal-hero-img" />`;
+      } else if (card.kind === "video") {
         modalPreviewTarget.innerHTML = `
           <video src="${asset.url}" controls class="modal-hero-video"></video>
         `;
@@ -446,9 +421,14 @@ const formattedTotalSize =
 
   copySnippetBtn?.addEventListener("click", async () => {
     if (!currentSelectedAsset) return;
-    const snippet = currentSelectedAsset.mimeType.startsWith("image/")
-      ? `![${currentSelectedAsset.altText || currentSelectedAsset.filename}](${currentSelectedAsset.url})`
-      : `<a href="${currentSelectedAsset.url}" download="${currentSelectedAsset.filename}">${currentSelectedAsset.title || currentSelectedAsset.filename}</a>`;
+    // The same insertion the editor writes, so a copied asset can be pasted into an
+    // Article and render as a real block instead of literal text.
+    const snippet = insertionForAsset({
+      url: currentSelectedAsset.url,
+      mimeType: currentSelectedAsset.mimeType,
+      label: currentSelectedAsset.altText || currentSelectedAsset.title,
+      filename: currentSelectedAsset.filename,
+    });
     await navigator.clipboard.writeText(snippet);
     const orig = copySnippetBtn.innerHTML;
     copySnippetBtn.innerHTML = `<span>Copied!</span>`;
@@ -541,8 +521,13 @@ const formattedTotalSize =
     renderGrid();
   });
 
+  /** The Sort the select offers, narrowed from its value. */
+  const SORTS: AssetSort[] = ["newest", "oldest", "largest", "smallest", "alpha"];
+  const TYPES: AssetTypeFilter[] = ["all", "image", "video", "document"];
+
   sortSelect?.addEventListener("change", () => {
-    activeSort = sortSelect.value;
+    const chosen = sortSelect.value as AssetSort;
+    activeSort = SORTS.includes(chosen) ? chosen : "newest";
     renderGrid();
   });
 
@@ -550,7 +535,8 @@ const formattedTotalSize =
     btn.addEventListener("click", () => {
       typePills.forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
-      activeTypeFilter = (btn as HTMLElement).dataset.type || "all";
+      const chosen = (btn as HTMLElement).dataset.type as AssetTypeFilter | undefined;
+      activeTypeFilter = chosen && TYPES.includes(chosen) ? chosen : "all";
       renderGrid();
     });
   });
@@ -570,81 +556,98 @@ const formattedTotalSize =
   dropzone?.addEventListener("drop", async (e) => {
     e.preventDefault();
     dropzone.classList.remove("dragover");
-    if (e.dataTransfer?.files) {
-      await handleFilesUpload(e.dataTransfer.files);
+    if (e.dataTransfer?.files?.length) {
+      uploads.enqueue(e.dataTransfer.files);
     }
   });
 
-  fileInput?.addEventListener("change", async () => {
-    if (fileInput.files) {
-      await handleFilesUpload(fileInput.files);
-      fileInput.value = "";
+  fileInput?.addEventListener("change", () => {
+    if (fileInput.files?.length) {
+      uploads.enqueue(fileInput.files);
     }
+    fileInput.value = "";
   });
 
-  async function handleFilesUpload(fileList: FileList) {
-    if (!fileList || fileList.length === 0) return;
+  function escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /** Every asset the queue finished uploading joins the grid, once. */
+  const collectedUploads = new Set<string>();
+  function collectUploaded(items: readonly UploadItem[]) {
+    for (const item of items) {
+      if (item.status !== "done" || !item.asset || collectedUploads.has(item.id)) continue;
+      collectedUploads.add(item.id);
+
+      const now = new Date().toISOString();
+      allAssets.unshift({ ...item.asset, description: "", createdAt: now, updatedAt: now });
+      renderGrid();
+    }
+  }
+
+  function renderUploadQueue(items: readonly UploadItem[]) {
+    if (items.length === 0) {
+      progressContainer?.classList.add("hidden");
+      return;
+    }
 
     progressContainer?.classList.remove("hidden");
 
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      const isImg = file.type.startsWith("image/");
-      const maxSize = isImg ? 2 * 1024 * 1024 : 25 * 1024 * 1024;
-      const maxLabel = isImg ? "2 MiB" : "25 MiB";
+    const settled = items.filter(
+      (item) => item.status !== "queued" && item.status !== "uploading"
+    ).length;
+    const busy = settled < items.length;
 
-      if (file.size > maxSize) {
-        alert(`File "${file.name}" exceeds the ${maxLabel} size limit.`);
-        continue;
-      }
-
-      if (progressText) {
-        progressText.textContent = `Uploading ${file.name} (${i + 1}/${fileList.length})...`;
-      }
-      if (progressBar) {
-        progressBar.style.width = `${Math.round(((i + 0.5) / fileList.length) * 100)}%`;
-      }
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      try {
-        const res = await fetch("/api/admin/assets/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        if (data.success) {
-          allAssets.unshift({
-            id: data.assetId,
-            filename: data.filename,
-            originalName: file.name,
-            mimeType: data.mimeType || file.type,
-            byteSize: data.byteSize || file.size,
-            url: data.url,
-            title: data.filename,
-            altText: data.filename,
-            description: "",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-        } else {
-          alert(`Error uploading ${file.name}: ${data.error}`);
-        }
-      } catch {
-        alert(`Failed to upload ${file.name}`);
-      }
+    if (progressBar) progressBar.style.width = `${Math.round((settled / items.length) * 100)}%`;
+    if (progressText) {
+      progressText.textContent = busy
+        ? `Uploading ${settled + 1} of ${items.length}...`
+        : "Upload complete.";
     }
 
-    if (progressBar) progressBar.style.width = "100%";
-    if (progressText) progressText.textContent = "Upload complete!";
-    setTimeout(() => {
-      progressContainer?.classList.add("hidden");
-      if (progressBar) progressBar.style.width = "0%";
-    }, 1200);
+    const queueList = document.getElementById("upload-queue-list");
+    if (!queueList) return;
 
-    renderGrid();
+    queueList.innerHTML = items
+      .map((item) => {
+        const failed = item.status === "failed" || item.status === "rejected";
+        const state = item.status === "done" ? "done" : failed ? "failed" : "busy";
+        const note =
+          item.error ||
+          (item.status === "done" ? "Added to the library" : "Uploading…");
+        const retry =
+          item.status === "failed"
+            ? `<button type="button" class="queue-action" data-retry="${item.id}">Retry</button>`
+            : "";
+        const dismiss = busy && item.status === "uploading"
+          ? ""
+          : `<button type="button" class="queue-action" data-dismiss="${item.id}">Dismiss</button>`;
+
+        return `<li class="queue-item ${state}"><span class="queue-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span><span class="queue-note">${escapeHtml(note)}</span>${retry}${dismiss}</li>`;
+      })
+      .join("");
+
+    queueList.querySelectorAll<HTMLButtonElement>("[data-retry]").forEach((btn) => {
+      btn.addEventListener("click", () => uploads.retry(btn.dataset.retry || ""));
+    });
+    queueList.querySelectorAll<HTMLButtonElement>("[data-dismiss]").forEach((btn) => {
+      btn.addEventListener("click", () => uploads.dismiss(btn.dataset.dismiss || ""));
+    });
   }
+
+  // The queue owns the size verdict, the ordering and the retries; this script only decides
+  // what it looks like. The same module drives the editor's Asset Modal.
+  const uploads = createUploadQueue({
+    post: postAssetFile,
+    onChange: (items) => {
+      collectUploaded(items);
+      renderUploadQueue(items);
+    },
+  });
 
   // Initial render
   renderGrid();
@@ -795,6 +798,72 @@ const formattedTotalSize =
     margin-top: 0.5rem;
     font-size: 0.85rem;
     color: var(--text-muted);
+  }
+
+  /* Upload queue: one row per file, so a refusal is readable and retryable */
+  .upload-queue-list {
+    list-style: none;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    text-align: left;
+  }
+
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .queue-item.failed {
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+
+  .queue-item.done {
+    border-color: rgba(34, 197, 94, 0.35);
+  }
+
+  .queue-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 12rem;
+  }
+
+  .queue-note {
+    flex: 1;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .queue-item.failed .queue-note {
+    color: #f87171;
+    white-space: normal;
+  }
+
+  .queue-action {
+    background: none;
+    border: none;
+    color: var(--primary-light);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .queue-action:hover {
+    text-decoration: underline;
   }
 
   /* Controls Bar */

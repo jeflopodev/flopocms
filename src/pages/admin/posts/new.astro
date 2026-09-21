@@ -1,35 +1,39 @@
 ---
 export const prerender = false;
 
-import { getDb, posts } from "../../../lib/db";
+import { createServices } from "../../../lib/services";
+import type { PostRecord } from "../../../lib/post-store";
 
-const db = getDb(Astro.locals);
+const services = createServices(Astro.locals);
 
 const user = Astro.locals.user || { username: "jeflopo" };
 
 const id = crypto.randomUUID();
 const suffix = Math.random().toString(36).substring(2, 7);
 const slug = `untitled-${suffix}`;
-const title = "Untitled Article";
 const now = new Date().toISOString();
 
+const draft: PostRecord = {
+  id,
+  slug,
+  title: "Untitled Article",
+  description: "",
+  category: "General",
+  tags: "[]",
+  author: user.username,
+  featuredImage: "",
+  contentMdx: "",
+  status: "draft",
+  template: "default",
+  defaultWidth: "60rem",
+  wideWidth: "70rem",
+  pubDate: now,
+  createdAt: now,
+  updatedAt: now,
+};
+
 try {
-  await db.insert(posts).values({
-    id,
-    slug,
-    title,
-    description: "",
-    category: "General",
-    tags: "[]",
-    author: user.username,
-    featuredImage: "",
-    contentMdx: "",
-    status: "draft",
-    template: "default",
-    pubDate: now,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await services.posts.save(draft);
 } catch (err) {
   console.error("Failed to create new draft post:", err);
 }

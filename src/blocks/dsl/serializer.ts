@@ -1,5 +1,6 @@
 import type { BlockNode, InlineSpan } from "../types";
 import { getBlock } from "../registry";
+import { linkSnippet, markSnippet } from "../marks";
 
 function formatAttrValue(val: any): string {
   if (typeof val === "string") {
@@ -39,17 +40,12 @@ function serializeInlineSpans(spans: (BlockNode | InlineSpan)[]): string {
 
       // Wrap in mark tags
       for (const mark of marks) {
-        if (mark === "bold") text = `<Bold>${text}</Bold>`;
-        else if (mark === "italic") text = `<Italic>${text}</Italic>`;
-        else if (mark === "strike") text = `<Strike>${text}</Strike>`;
-        else if (mark === "code") text = `<Code>${text}</Code>`;
-        else if (mark === "underline") text = `<Underline>${text}</Underline>`;
+        text = markSnippet(mark, text);
       }
 
       for (const def of markDefs) {
         if (def.type === "link") {
-          const href = def.attrs?.href || "#";
-          text = `<Link href="${href}">${text}</Link>`;
+          text = linkSnippet(text, def.attrs?.href || "#", def.attrs?.download);
         }
       }
 

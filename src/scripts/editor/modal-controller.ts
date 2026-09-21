@@ -1,3 +1,11 @@
+import { insertionForAsset } from "../../blocks/insertion";
+import {
+  createUploadQueue,
+  postAssetFile,
+  type UploadItem,
+  type UploadedAsset,
+} from "../../lib/upload-queue";
+
 export interface ModalControllerOptions {
   initialAssets: any[];
   insertSnippet: (snippet: string) => void;
@@ -37,7 +45,13 @@ export class ModalController {
   private modalFileInput = document.getElementById("modal-file-input") as HTMLInputElement;
   private modalUploadStatus = document.getElementById("modal-upload-status");
   private modalTabBtns = document.querySelectorAll(".modal-tab-btn");
-  private postCategoryField = document.getElementById("post-category-field") as unknown as HTMLSelectElement;
+
+  /** Files the editor dropped into the modal, through the same queue the Asset Library uses. */
+  private uploads = createUploadQueue({
+    post: postAssetFile,
+    onChange: (items) => this.onUploadChange(items),
+  });
+  private insertedUploads = new Set<string>();
 
   constructor(options: ModalControllerOptions) {
     this.allAssets = [...options.initialAssets];
@@ -97,39 +111,15 @@ export class ModalController {
     });
   }
 
+  /**
+   * Every insertion button carries its own DSL snippet, stamped in by the drawer from
+   * the Block Registry. This controller knows nothing about individual block types.
+   */
   private initBlockInsertionListeners(): void {
-    document.querySelectorAll(".btn-insert-block").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const target = e.currentTarget as HTMLElement;
-        const type = target.dataset.insert;
-        if (type === "amazon") {
-          this.insertSnippet(
-            `\n<AmazonProduct\n  asin="B08N5WRWNW"\n  title="Product Name"\n  price="$29.99"\n  rating={4.5}\n  image="/uploads/product.webp"\n  ctaText="Buy on Amazon"\n/>\n`
-          );
-        } else if (type === "youtube") {
-          this.insertSnippet(
-            `\n<YouTube id="dQw4w9WgXcQ" title="Video Title" stretch="wide" />\n`
-          );
-        } else if (type === "list") {
-          this.insertSnippet(
-            `\n<List type="unordered">\n  <ListItem>\n    <Paragraph>First key takeaway</Paragraph>\n  </ListItem>\n  <ListItem>\n    <Paragraph>Second key takeaway</Paragraph>\n  </ListItem>\n</List>\n`
-          );
-        } else if (type === "related") {
-          this.insertSnippet(
-            `\n<RelatedPosts category="${this.postCategoryField?.value || 'General'}" limit={3} />\n`
-          );
-        } else if (type === "schema") {
-          this.insertSnippet(
-            `\n<Schema type="FAQPage" data={{\n  "@type": "FAQPage",\n  "mainEntity": [\n    {\n      "@type": "Question",\n      "name": "What is Astro?",\n      "acceptedAnswer": {\n        "@type": "Answer",\n        "text": "Astro is the web framework for content-driven websites."\n      }\n    }\n  ]\n}} />\n`
-          );
-        }
-      });
-    });
-
-    document.querySelectorAll(".btn-callout").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const variant = (e.currentTarget as HTMLElement).dataset.callout || "note";
-        this.insertSnippet(`\n<Callout variant="${variant}">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>\n`);
+    document.querySelectorAll(".btn-insert-block, .btn-callout").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const snippet = (btn as HTMLElement).dataset.snippet;
+        if (snippet) this.insertSnippet(snippet);
       });
     });
   }
@@ -156,11 +146,14 @@ export class ModalController {
       if (this.pickerTarget === "featured") {
         this.onAssetPickedForHero(this.pickedAsset.url);
       } else {
-        if (this.pickedAsset.mimeType.startsWith("image/")) {
-          this.insertSnippet(`\n<Image src="${this.pickedAsset.url}" alt="${this.pickedAsset.altText || this.pickedAsset.filename}" stretch="default" />\n`);
-        } else {
-          this.insertSnippet(`\n<Link href="${this.pickedAsset.url}">${this.pickedAsset.title || this.pickedAsset.filename}</Link>\n`);
-        }
+        this.insertSnippet(
+          `\n${insertionForAsset({
+            url: this.pickedAsset.url,
+            mimeType: this.pickedAsset.mimeType,
+            label: this.pickedAsset.altText || this.pickedAsset.title,
+            filename: this.pickedAsset.filename,
+          })}\n`
+        );
       }
       this.assetModal.close();
     });
@@ -173,25 +166,26 @@ export class ModalController {
     this.modalDropzone?.addEventListener("dragleave", () => {
       this.modalDropzone?.classList.remove("dragover");
     });
-    this.modalDropzone?.addEventListener("drop", async (e) => {
+    this.modalDropzone?.addEventListener("drop", (e) => {
       e.preventDefault();
       this.modalDropzone?.classList.remove("dragover");
-      if (e.dataTransfer?.files?.[0]) {
-        await this.uploadFromModal(e.dataTransfer.files[0]);
+      if (e.dataTransfer?.files?.length) {
+        this.uploads.enqueue(e.dataTransfer.files);
       }
     });
 
-    this.modalFileInput?.addEventListener("change", async () => {
-      if (this.modalFileInput.files?.[0]) {
-        await this.uploadFromModal(this.modalFileInput.files[0]);
-        this.modalFileInput.value = "";
+    this.modalFileInput?.addEventListener("change", () => {
+      if (this.modalFileInput.files?.length) {
+        this.uploads.enqueue(this.modalFileInput.files);
       }
+      this.modalFileInput.value = "";
     });
   }
 
   private openAssetPicker(target: "editor" | "featured"): void {
     this.pickerTarget = target;
     this.pickedAsset = null;
+    if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
     if (this.confirmAssetModalBtn) {
       this.confirmAssetModalBtn.disabled = true;
       this.confirmAssetModalBtn.textContent = target === "featured" ? "Set as Featured Image" : "Insert into Article";
@@ -274,63 +268,60 @@ export class ModalController {
     }
   }
 
-  private async uploadFromModal(file: File): Promise<void> {
-    const isImg = file.type.startsWith("image/");
-    const maxSize = isImg ? 2 * 1024 * 1024 : 25 * 1024 * 1024;
-    const maxLabel = isImg ? "2 MiB" : "25 MiB";
+  /**
+   * Each finished upload joins the modal's library and is inserted where the editor asked.
+   * The modal stays open so a refusal can be read and retried, rather than closing itself
+   * the moment one file succeeds.
+   */
+  private onUploadChange(items: readonly UploadItem[]): void {
+    for (const item of items) {
+      if (item.status !== "done" || !item.asset || this.insertedUploads.has(item.id)) continue;
+      this.insertedUploads.add(item.id);
+      this.acceptUploadedAsset(item.asset);
+    }
 
-    if (file.size > maxSize) {
-      alert(`File "${file.name}" exceeds the ${maxLabel} size limit.`);
+    this.renderUploadStatus(items);
+  }
+
+  private acceptUploadedAsset(asset: UploadedAsset): void {
+    this.allAssets.unshift({ ...asset, description: "" });
+
+    if (this.pickerTarget === "featured") {
+      this.onAssetPickedForHero(asset.url);
       return;
     }
 
-    if (this.modalUploadStatus) {
-      this.modalUploadStatus.textContent = `Uploading ${file.name}...`;
+    this.insertSnippet(
+      `\n${insertionForAsset({
+        url: asset.url,
+        mimeType: asset.mimeType,
+        label: asset.altText,
+        filename: asset.filename,
+      })}\n`
+    );
+    this.renderModalAssets();
+  }
+
+  private renderUploadStatus(items: readonly UploadItem[]): void {
+    if (!this.modalUploadStatus) return;
+
+    const active = items.find((item) => item.status === "uploading" || item.status === "queued");
+    if (active) {
+      this.modalUploadStatus.textContent =
+        active.status === "uploading" ? `Uploading ${active.filename}...` : "Preparing upload...";
+      return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("/api/admin/assets/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = (await res.json()) as any;
-      if (data.success) {
-        const newAsset = {
-          id: data.assetId,
-          filename: data.filename,
-          originalName: file.name,
-          mimeType: data.mimeType || file.type,
-          byteSize: data.byteSize || file.size,
-          url: data.url,
-          title: data.filename,
-          altText: data.filename,
-          description: "",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        this.allAssets.unshift(newAsset);
-
-        if (this.pickerTarget === "featured") {
-          this.onAssetPickedForHero(data.url);
-        } else {
-          this.insertSnippet(`\n${data.snippet || `![${data.filename}](${data.url})`}\n`);
-        }
-
-        if (this.modalUploadStatus) this.modalUploadStatus.textContent = "Upload successful & inserted!";
-        setTimeout(() => {
-          this.assetModal.close();
-          if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
-        }, 500);
-      } else {
-        alert(data.error || "Upload failed");
-        if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
-      }
-    } catch {
-      alert("Error contacting server");
-      if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
+    const refused = items.filter((item) => item.status === "failed" || item.status === "rejected");
+    if (refused.length > 0) {
+      const reason = refused[0].error || "Upload failed.";
+      this.modalUploadStatus.textContent =
+        refused.length === 1 ? reason : `${refused.length} files were not uploaded. ${reason}`;
+      return;
     }
+
+    this.modalUploadStatus.textContent = items.some((item) => item.status === "done")
+      ? "Upload complete and inserted."
+      : "";
   }
 }

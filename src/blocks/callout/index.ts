@@ -28,6 +28,10 @@ export const calloutBlock: BlockDefinition<CalloutProps> = {
   schema: calloutSchema,
   supportsStretch: true,
   defaultProps: { variant: "note", stretch: "default" },
+  insertions: Object.keys(defaultTitles).map((variant) => ({
+    label: defaultTitles[variant],
+    snippet: `<Callout variant="${variant}">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>`,
+  })),
   snippet: `<Callout variant="note">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>`,
   render: (props, childrenHtml) => {
     const variant = props.variant || "note";

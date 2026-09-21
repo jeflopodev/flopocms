@@ -1,26 +1,18 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
-import AutoImport from 'astro-auto-import';
 import mdx from '@astrojs/mdx';
-import { satteri } from '@astrojs/markdown-satteri';
-import { satteriSchemaExtractor } from './src/plugins/satteri-schema-extractor.mjs';
-import { blockImports } from './src/blocks/index.ts';
 
+// `mdx()` stays, and only as a loader: the content collection reads Article bodies from
+// `.mdx` bundles and nothing renders through it. ADR-0010 replaced component-based rendering
+// with the Document Renderer, which emits HTML strings, so the auto-imported `.astro` block
+// components and the Sätteri markdown processor were dead configuration — see the 2026-09-21
+// amendment on ADR-0007.
+//
 // https://astro.build/config
 export default defineConfig({
   adapter: cloudflare({
     imageService: 'compile',
   }),
-  integrations: [
-    AutoImport({
-      imports: blockImports,
-    }),
-    mdx(),
-  ],
-  markdown: {
-    processor: satteri({
-      mdastPlugins: [satteriSchemaExtractor()],
-    }),
-  },
+  integrations: [mdx()],
 });
