@@ -4,7 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { EditorSession } from "./editor-session";
 import { EditorDomAdapter } from "./dom-adapter";
 import { LockManager } from "./lock-manager";
-import { ModalController } from "./modal-controller";
+import { AssetPickerModal } from "./asset-modal";
 import { actionChange, actionFor } from "./actions";
 
 /**
@@ -121,18 +121,6 @@ export function initEditor(data: EditorInitData): void {
     });
   });
 
-  // DOM adapter: reads the metadata fields, renders the chrome, owns beforeunload
-  const dom = new EditorDomAdapter(session, post.id);
-
-  // Lock client adapter: heartbeat, instant release, and conflict reports
-  new LockManager({
-    postId: post.id,
-    initiallyLocked: Boolean(post.isInitiallyLocked),
-    lockUser: post.lockUser,
-    onConflict: (lockedBy) => session.lockConflict(lockedBy),
-    isReadOnly: () => session.isReadOnly,
-  });
-
   /**
    * Applies a toolbar action: the insertion and the caret both come from the action list,
    * so this function has no spelling or offset of its own to get wrong.
@@ -167,11 +155,26 @@ export function initEditor(data: EditorInitData): void {
     session.markDirty();
   }
 
-  // Modal Controller
-  new ModalController({
-    initialAssets: assets,
-    insertSnippet,
+  // DOM adapter: reads metadata fields, manages drawer and toolbar chrome, owns beforeunload
+  const dom = new EditorDomAdapter(session, post.id, {
     applyFormatting,
-    onAssetPickedForHero: (url) => dom.setFeaturedImage(url),
+    insertSnippet,
+  });
+
+  // Lock client adapter: heartbeat, instant release, and conflict reports
+  new LockManager({
+    postId: post.id,
+    initiallyLocked: Boolean(post.isInitiallyLocked),
+    lockUser: post.lockUser,
+    onConflict: (lockedBy) => session.lockConflict(lockedBy),
+    isReadOnly: () => session.isReadOnly,
+  });
+
+  // Asset picker modal: manages media selection dialog and upload dropzone
+  new AssetPickerModal({
+    initialAssets: assets,
+    onInsertSnippet: insertSnippet,
+    onSetFeaturedImage: (url) => dom.setFeaturedImage(url),
   });
 }
+

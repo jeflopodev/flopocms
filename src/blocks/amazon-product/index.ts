@@ -19,6 +19,12 @@ export const amazonProductBlock: BlockDefinition<AmazonProductProps> = {
     ctaText: "Buy on Amazon",
     stretch: "default",
   },
+  drawer: {
+    description: "Product showcase with global assets",
+    preview: '<AmazonProduct asin="B0..." price="$..." image="/uploads/..." />',
+    insertLabel: "Product Block",
+    order: 3,
+  },
   snippet: `<AmazonProduct
   asin="B08N5WRWNW"
   title="Product Name"

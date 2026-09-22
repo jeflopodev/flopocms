@@ -2,6 +2,11 @@ import { slugify } from "../../utils/slugify";
 import type { EditableArticleFields } from "../../lib/article-write-model";
 import type { EditorSession, SessionSnapshot } from "./editor-session";
 
+export interface EditorDomAdapterOptions {
+  applyFormatting?: (tool: string) => void;
+  insertSnippet?: (snippet: string) => void;
+}
+
 /**
  * DOM adapter.
  *
@@ -41,6 +46,16 @@ export class EditorDomAdapter {
   private lockBanner = document.getElementById("lock-warning-banner");
   private lockBannerText = document.getElementById("lock-warning-text");
 
+  // Drawer Elements
+  private activePanel: "settings" | "blocks" | "none" = "settings";
+  private drawer = document.getElementById("editor-drawer");
+  private drawerHeading = document.getElementById("drawer-heading");
+  private drawerCloseBtn = document.getElementById("drawer-close-btn");
+  private toggleSettingsBtn = document.getElementById("toggle-settings-btn");
+  private toggleBlocksBtn = document.getElementById("toggle-blocks-btn");
+  private settingsPanel = document.getElementById("settings-panel-content");
+  private blocksPanel = document.getElementById("blocks-panel-content");
+
   private handleBeforeUnload = (e: BeforeUnloadEvent) => {
     if (this.session.hasUnsavedChanges) {
       e.preventDefault();
@@ -50,12 +65,37 @@ export class EditorDomAdapter {
 
   private readonly session: EditorSession;
   private readonly postId: string;
+  private readonly options?: EditorDomAdapterOptions;
 
-  constructor(session: EditorSession, postId: string) {
+  constructor(session: EditorSession, postId: string, options?: EditorDomAdapterOptions) {
     this.session = session;
     this.postId = postId;
+    this.options = options;
     this.initEventListeners();
     this.session.subscribe((snapshot) => this.render(snapshot));
+  }
+
+  public setPanel(panel: "settings" | "blocks" | "none"): void {
+    this.activePanel = panel;
+    if (panel === "none") {
+      this.drawer?.classList.remove("open");
+      this.toggleSettingsBtn?.classList.remove("active");
+      this.toggleBlocksBtn?.classList.remove("active");
+    } else if (panel === "settings") {
+      this.drawer?.classList.add("open");
+      this.settingsPanel?.classList.add("active");
+      this.blocksPanel?.classList.remove("active");
+      if (this.drawerHeading) this.drawerHeading.textContent = "Article Settings";
+      this.toggleSettingsBtn?.classList.add("active");
+      this.toggleBlocksBtn?.classList.remove("active");
+    } else if (panel === "blocks") {
+      this.drawer?.classList.add("open");
+      this.blocksPanel?.classList.add("active");
+      this.settingsPanel?.classList.remove("active");
+      if (this.drawerHeading) this.drawerHeading.textContent = "Component Blocks";
+      this.toggleBlocksBtn?.classList.add("active");
+      this.toggleSettingsBtn?.classList.remove("active");
+    }
   }
 
   /** Everything the session needs to persist the Article, read from the fields. */
@@ -257,6 +297,37 @@ export class EditorDomAdapter {
         void this.session.saveRequested();
       }
     });
+
+    // Drawer panel toggles
+    this.toggleSettingsBtn?.addEventListener("click", () => {
+      this.setPanel(this.activePanel === "settings" ? "none" : "settings");
+    });
+    this.toggleBlocksBtn?.addEventListener("click", () => {
+      this.setPanel(this.activePanel === "blocks" ? "none" : "blocks");
+    });
+    this.drawerCloseBtn?.addEventListener("click", () => {
+      this.setPanel("none");
+    });
+
+    // Formatting toolbar clicks
+    if (this.options?.applyFormatting) {
+      document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tool = (btn as HTMLElement).dataset.tool;
+          if (tool) this.options?.applyFormatting?.(tool);
+        });
+      });
+    }
+
+    // Block insertion snippet clicks
+    if (this.options?.insertSnippet) {
+      document.querySelectorAll(".btn-insert-block, .btn-callout").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const snippet = (btn as HTMLElement).dataset.snippet;
+          if (snippet) this.options?.insertSnippet?.(snippet);
+        });
+      });
+    }
 
     // Unsaved work is protected here, because this adapter is the one that knows the page
     window.addEventListener("beforeunload", this.handleBeforeUnload);

@@ -10,6 +10,12 @@ export const schemaBlock: BlockDefinition<SchemaBlockProps> = {
   category: "meta",
   icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
   schema: schemaBlockSchema,
+  drawer: {
+    description: "Structured FAQ / Article JSON-LD",
+    preview: '<Schema type="FAQPage">...</Schema>',
+    insertLabel: "Schema Block",
+    order: 6,
+  },
   snippet: `<Schema type="FAQPage" data={{\n  "@type": "FAQPage",\n  "mainEntity": [\n    {\n      "@type": "Question",\n      "name": "Question title?",\n      "acceptedAnswer": {\n        "@type": "Answer",\n        "text": "Answer text."\n      }\n    }\n  ]\n}} />`,
   generateJsonLd: (props) => {
     if (!props.type) return null;

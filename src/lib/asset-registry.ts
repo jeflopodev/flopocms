@@ -169,3 +169,106 @@ export async function deleteAsset(options: DeleteAssetOptions): Promise<DeleteAs
 
   return { success: true };
 }
+
+/**
+ * The Asset Registry seam.
+ *
+ * Callers interact with assets through this interface without coordinating
+ * raw database queries and media storage adapters manually.
+ */
+export interface AssetRegistry {
+  upload(file: File): Promise<RegisterAssetResult>;
+  delete(id: string): Promise<DeleteAssetResult>;
+  updateMetadata(options: UpdateAssetMetadataOptions): Promise<DeleteAssetResult>;
+  list(): Promise<Asset[]>;
+  find(id: string): Promise<Asset | null>;
+}
+
+/**
+ * Production adapter: coordinates D1 database records with MediaStorage bytes.
+ */
+export function createD1AssetRegistry(db: DbClient, storage: MediaStorage): AssetRegistry {
+  return {
+    upload: (file: File) => registerAsset({ file, db, storage }),
+    delete: (id: string) => deleteAsset({ id, db, storage }),
+    updateMetadata: (options: UpdateAssetMetadataOptions) => updateAssetMetadata(db, options),
+    list: () => listAssets(db),
+    find: async (id: string) => {
+      const [row] = await db.select().from(assets).where(eq(assets.id, id)).limit(1);
+      return row ?? null;
+    },
+  };
+}
+
+/**
+ * In-memory substitute for tests, avoiding SQLite/D1 and file system dependencies.
+ */
+export class InMemoryAssetRegistry implements AssetRegistry {
+  private items = new Map<string, Asset>();
+
+  constructor(seed: Asset[] = []) {
+    for (const a of seed) this.items.set(a.id, a);
+  }
+
+  async upload(file: File): Promise<RegisterAssetResult> {
+    if (!file) return { success: false, error: "No file provided" };
+
+    const verdict = sizeVerdictFor({ mimeType: file.type, byteSize: file.size, filename: file.name });
+    if (!verdict.ok) return { success: false, error: verdict.reason };
+
+    const originalName = file.name || "upload.bin";
+    const { cleanFilename, baseName } = sanitizeFilename(originalName);
+    const fallbackTitle = baseName.replace(/-/g, " ");
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const asset: Asset = {
+      id,
+      filename: cleanFilename,
+      originalName,
+      mimeType: file.type || "application/octet-stream",
+      byteSize: file.size,
+      url: `/uploads/${cleanFilename}`,
+      title: fallbackTitle,
+      altText: fallbackTitle,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.items.set(id, asset);
+    return { success: true, asset };
+  }
+
+  async delete(id: string): Promise<DeleteAssetResult> {
+    if (!id) return { success: false, error: "Missing asset ID" };
+    if (!this.items.has(id)) return { success: false, error: "Asset not found" };
+    this.items.delete(id);
+    return { success: true };
+  }
+
+  async updateMetadata(options: UpdateAssetMetadataOptions): Promise<DeleteAssetResult> {
+    const { id, title, altText, description } = options;
+    if (!id) return { success: false, error: "Missing asset ID" };
+    const existing = this.items.get(id);
+    if (!existing) return { success: false, error: "Asset not found" };
+
+    this.items.set(id, {
+      ...existing,
+      title,
+      altText,
+      description,
+      updatedAt: new Date().toISOString(),
+    });
+    return { success: true };
+  }
+
+  async list(): Promise<Asset[]> {
+    return [...this.items.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async find(id: string): Promise<Asset | null> {
+    return this.items.get(id) ?? null;
+  }
+}
+

@@ -18,6 +18,12 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
   icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
   schema: relatedPostsSchema,
   defaultProps: { limit: 3, title: "Related Articles" },
+  drawer: {
+    description: "Other published Articles, read by category",
+    preview: '<RelatedPosts category="Astro" limit={3} />',
+    insertLabel: "Related Posts",
+    order: 5,
+  },
   snippet: `<RelatedPosts category="General" limit={3} />`,
   loadServerData: async (props, ctx: BlockRenderContext) => {
     // Reads go through the Article Read Model, never a direct query against a store.

@@ -2,6 +2,7 @@ import { inspectDocument, type DocumentProblem } from "../blocks/dsl/parser";
 import { BLOG_DIR } from "./article-mirror";
 import type { ArticleWriteModel } from "./article-write-model";
 import { toPostRecord } from "./article-write-model";
+import type { PostRecord } from "./post-store";
 import type { Services } from "./services";
 
 export interface PostMdxData {
@@ -301,3 +302,118 @@ export async function deletePostLifecycle(options: {
 
   return { success: true, deletedFromGitHub };
 }
+
+export interface CreateDraftResult {
+  success: boolean;
+  id?: string;
+  slug?: string;
+  error?: string;
+}
+
+export interface DuplicatePostResult {
+  success: boolean;
+  newId?: string;
+  error?: string;
+}
+
+/**
+ * Creates a new Draft Article with validated default metadata in the editorial record.
+ */
+export async function createDraftPost(options: {
+  actor: { id?: string; username?: string };
+  services: Services;
+}): Promise<CreateDraftResult> {
+  const { actor, services } = options;
+  const { posts, clock } = services;
+
+  const id = crypto.randomUUID();
+  let suffix = Math.random().toString(36).substring(2, 7);
+  let slug = `untitled-${suffix}`;
+
+  while (await posts.slugTaken(slug, id)) {
+    suffix = Math.random().toString(36).substring(2, 7);
+    slug = `untitled-${suffix}`;
+  }
+
+  const now = clock.now().toISOString();
+  const author = actor.username || "jeflopo";
+
+  const draft: PostRecord = {
+    id,
+    slug,
+    title: "Untitled Article",
+    description: "",
+    category: "General",
+    tags: "[]",
+    author,
+    featuredImage: "",
+    contentMdx: "",
+    status: "draft",
+    template: "default",
+    defaultWidth: "60rem",
+    wideWidth: "70rem",
+    pubDate: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    await posts.save(draft);
+    return { success: true, id, slug };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to create draft post" };
+  }
+}
+
+/**
+ * Duplicates an existing Article as a new Draft with unique slug and (Copy) title.
+ */
+export async function duplicatePostLifecycle(options: {
+  id: string;
+  services: Services;
+}): Promise<DuplicatePostResult> {
+  const { id, services } = options;
+  const { posts, clock } = services;
+
+  if (!id) {
+    return { success: false, error: "Missing post ID" };
+  }
+
+  const original = await posts.find(id);
+  if (!original) {
+    return { success: false, error: "Post not found" };
+  }
+
+  const newId = crypto.randomUUID();
+  let suffix = Math.random().toString(36).substring(2, 6);
+  let slug = `${original.slug}-copy-${suffix}`;
+
+  while (await posts.slugTaken(slug, newId)) {
+    suffix = Math.random().toString(36).substring(2, 6);
+    slug = `${original.slug}-copy-${suffix}`;
+  }
+
+  const now = clock.now().toISOString();
+
+  const copy: PostRecord = {
+    ...original,
+    id: newId,
+    slug,
+    title: `${original.title} (Copy)`,
+    // A copy is never born published.
+    status: "draft",
+    pubDate: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    await posts.save(copy);
+    return { success: true, newId };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to duplicate post" };
+  }
+}
+
+export const duplicatePost = duplicatePostLifecycle;
+

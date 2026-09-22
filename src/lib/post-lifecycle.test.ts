@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDraftPost,
   deletePostLifecycle,
+  duplicatePostLifecycle,
   savePostLifecycle,
   serializePostMdx,
   type PostMdxData,
@@ -450,3 +452,99 @@ describe("serializePostMdx", () => {
     );
   });
 });
+
+describe("createDraftPost", () => {
+  it("creates a new draft post with unique id and slug", async () => {
+    const posts = new InMemoryPostStore();
+    const services = testServices({ posts });
+
+    const result = await createDraftPost({ actor: { username: "aflopo" }, services });
+
+    expect(result.success).toBe(true);
+    expect(result.id).toBeDefined();
+    expect(result.slug).toMatch(/^untitled-[a-z0-9]+$/);
+
+    const saved = await posts.find(result.id!);
+    expect(saved).toBeDefined();
+    expect(saved?.author).toBe("aflopo");
+    expect(saved?.status).toBe("draft");
+    expect(saved?.title).toBe("Untitled Article");
+    expect(saved?.template).toBe("default");
+    expect(saved?.defaultWidth).toBe("60rem");
+    expect(saved?.wideWidth).toBe("70rem");
+    expect(saved?.createdAt).toBe(NOW);
+    expect(saved?.updatedAt).toBe(NOW);
+  });
+
+  it("falls back to default author when none provided", async () => {
+    const posts = new InMemoryPostStore();
+    const services = testServices({ posts });
+
+    const result = await createDraftPost({ actor: {}, services });
+
+    expect(result.success).toBe(true);
+    const saved = await posts.find(result.id!);
+    expect(saved?.author).toBe("jeflopo");
+  });
+});
+
+describe("duplicatePostLifecycle", () => {
+  it("duplicates an existing post as a draft with (Copy) title and new unique slug", async () => {
+    const seed: PostRecord = {
+      id: "orig-1",
+      slug: "awesome-post",
+      title: "Awesome Post",
+      description: "Original description",
+      category: "Tech",
+      tags: '["astro"]',
+      author: "jeflopo",
+      featuredImage: "/uploads/hero.jpg",
+      contentMdx: "<Paragraph>Hello world</Paragraph>",
+      status: "published",
+      template: "two-column",
+      defaultWidth: "50rem",
+      wideWidth: "65rem",
+      pubDate: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const posts = new InMemoryPostStore([seed]);
+    const services = testServices({ posts });
+
+    const result = await duplicatePostLifecycle({ id: "orig-1", services });
+
+    expect(result.success).toBe(true);
+    expect(result.newId).toBeDefined();
+    expect(result.newId).not.toBe("orig-1");
+
+    const copy = await posts.find(result.newId!);
+    expect(copy).toBeDefined();
+    expect(copy?.title).toBe("Awesome Post (Copy)");
+    expect(copy?.slug).toMatch(/^awesome-post-copy-[a-z0-9]+$/);
+    expect(copy?.status).toBe("draft");
+    expect(copy?.template).toBe("two-column");
+    expect(copy?.contentMdx).toBe("<Paragraph>Hello world</Paragraph>");
+    expect(copy?.createdAt).toBe(NOW);
+    expect(copy?.updatedAt).toBe(NOW);
+  });
+
+  it("returns error when post is not found", async () => {
+    const posts = new InMemoryPostStore();
+    const services = testServices({ posts });
+
+    const result = await duplicatePostLifecycle({ id: "non-existent", services });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Post not found");
+  });
+
+  it("returns error when id is missing", async () => {
+    const posts = new InMemoryPostStore();
+    const services = testServices({ posts });
+
+    const result = await duplicatePostLifecycle({ id: "", services });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Missing post ID");
+  });
+});
+

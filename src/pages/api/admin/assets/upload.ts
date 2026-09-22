@@ -1,7 +1,6 @@
 export const prerender = false;
 
 import { adminRoute } from "../../../../lib/admin-route";
-import { registerAsset } from "../../../../lib/asset-registry";
 
 export const POST = adminRoute(async ({ request, services }) => {
   const formData = await request.formData();
@@ -9,7 +8,7 @@ export const POST = adminRoute(async ({ request, services }) => {
 
   if (!file) return { success: false, status: 400, error: "No file uploaded" };
 
-  const result = await registerAsset({ file, db: services.db, storage: services.media });
+  const result = await services.assets.upload(file);
 
   if (!result.success || !result.asset) {
     return { success: false, status: 400, error: result.error || "Failed to upload asset" };

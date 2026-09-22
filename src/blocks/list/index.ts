@@ -30,6 +30,12 @@ export const listBlock: BlockDefinition<ListProps> = {
   icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
   schema: listSchema,
   defaultProps: { type: "unordered" },
+  drawer: {
+    description: "Nested list with custom list-style-type",
+    preview: '<List type="unordered">...</List>',
+    insertLabel: "Complex List",
+    order: 2,
+  },
   snippet: `<List type="unordered">\n  <ListItem>\n    <Paragraph>First key takeaway</Paragraph>\n  </ListItem>\n  <ListItem>\n    <Paragraph>Second key takeaway</Paragraph>\n  </ListItem>\n</List>`,
   render: (props, childrenHtml) => {
     const isOrdered = props.type === "ordered";

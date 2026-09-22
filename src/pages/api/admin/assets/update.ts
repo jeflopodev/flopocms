@@ -1,7 +1,6 @@
 export const prerender = false;
 
 import { adminRoute, readJson } from "../../../../lib/admin-route";
-import { updateAssetMetadata } from "../../../../lib/asset-registry";
 
 interface UpdateAssetPayload {
   id?: string;
@@ -17,7 +16,7 @@ export const POST = adminRoute(async ({ request, services }) => {
   const { id, title = "", altText = "", description = "" } = raw.value as UpdateAssetPayload;
   if (!id) return { success: false, status: 400, error: "Asset ID is required" };
 
-  const result = await updateAssetMetadata(services.db, { id, title, altText, description });
+  const result = await services.assets.updateMetadata({ id, title, altText, description });
   if (!result.success) return { success: false, status: 400, error: result.error };
 
   return { success: true, message: "Asset metadata updated successfully" };

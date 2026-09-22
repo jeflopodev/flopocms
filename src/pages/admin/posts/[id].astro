@@ -2,7 +2,6 @@
 export const prerender = false;
 
 import { type Asset } from "../../../lib/db";
-import { listAssets } from "../../../lib/asset-registry";
 import { createServices } from "../../../lib/services";
 import type { PostRecord } from "../../../lib/post-store";
 import { type LockResult } from "../../../lib/locks";
@@ -43,7 +42,7 @@ try {
 
 let initialAssets: Asset[] = [];
 try {
-  initialAssets = await listAssets(services.db);
+  initialAssets = await services.assets.list();
 } catch (err) {
   console.error("Failed to list assets:", err);
 }

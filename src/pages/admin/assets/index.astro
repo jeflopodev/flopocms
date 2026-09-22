@@ -3,7 +3,6 @@ export const prerender = false;
 
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { assetLibrarySummary } from "../../../lib/asset-library";
-import { listAssets } from "../../../lib/asset-registry";
 import { createServices } from "../../../lib/services";
 import { type Asset } from "../../../lib/db";
 
@@ -11,7 +10,7 @@ const services = createServices(Astro.locals);
 
 let assets: Asset[] = [];
 try {
-  assets = await listAssets(services.db);
+  assets = await services.assets.list();
 } catch (err) {
   console.error("Fetch assets error:", err);
 }

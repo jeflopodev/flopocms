@@ -6,130 +6,86 @@ import {
   type UploadedAsset,
 } from "../../lib/upload-queue";
 
-export interface ModalControllerOptions {
+export interface AssetPickerModalOptions {
   initialAssets: any[];
-  insertSnippet: (snippet: string) => void;
-  applyFormatting: (tool: string) => void;
-  onAssetPickedForHero: (url: string) => void;
+  onInsertSnippet?: (snippet: string) => void;
+  onSetFeaturedImage?: (url: string) => void;
 }
 
-export class ModalController {
+/**
+ * Asset Picker Modal.
+ *
+ * Owns only the asset selection dialog (`#editor-asset-modal`), asset searching,
+ * tab switching between the library and upload dropzone, and the upload queue.
+ */
+export class AssetPickerModal {
   private allAssets: any[];
-  private insertSnippet: (snippet: string) => void;
-  private applyFormatting: (tool: string) => void;
-  private onAssetPickedForHero: (url: string) => void;
+  private onInsertSnippet?: (snippet: string) => void;
+  private onSetFeaturedImage?: (url: string) => void;
 
-  private activePanel: "settings" | "blocks" | "none" = "settings";
   private pickerTarget: "editor" | "featured" = "editor";
   private pickedAsset: any = null;
 
   // DOM Elements
-  private drawer = document.getElementById("editor-drawer");
-  private drawerHeading = document.getElementById("drawer-heading");
-  private drawerCloseBtn = document.getElementById("drawer-close-btn");
-  private toggleSettingsBtn = document.getElementById("toggle-settings-btn");
-  private toggleBlocksBtn = document.getElementById("toggle-blocks-btn");
-  private settingsPanel = document.getElementById("settings-panel-content");
-  private blocksPanel = document.getElementById("blocks-panel-content");
-
-  private assetModal = document.getElementById("editor-asset-modal") as HTMLDialogElement;
+  private assetModal = document.getElementById("editor-asset-modal") as HTMLDialogElement | null;
   private openAssetModalBtn = document.getElementById("open-asset-modal-btn");
   private browseHeroImageBtn = document.getElementById("browse-hero-image-btn");
   private closeAssetModalBtn = document.getElementById("close-asset-modal-btn");
   private cancelAssetModalBtn = document.getElementById("cancel-asset-modal-btn");
-  private confirmAssetModalBtn = document.getElementById("confirm-asset-modal-btn") as HTMLButtonElement;
-  private modalSearchInput = document.getElementById("modal-asset-search") as HTMLInputElement;
+  private confirmAssetModalBtn = document.getElementById("confirm-asset-modal-btn") as HTMLButtonElement | null;
+  private modalSearchInput = document.getElementById("modal-asset-search") as HTMLInputElement | null;
   private modalAssetsGrid = document.getElementById("modal-assets-grid");
   private selectedAssetInfo = document.getElementById("selected-asset-info");
   private modalDropzone = document.getElementById("modal-dropzone");
-  private modalFileInput = document.getElementById("modal-file-input") as HTMLInputElement;
+  private modalFileInput = document.getElementById("modal-file-input") as HTMLInputElement | null;
   private modalUploadStatus = document.getElementById("modal-upload-status");
   private modalTabBtns = document.querySelectorAll(".modal-tab-btn");
 
-  /** Files the editor dropped into the modal, through the same queue the Asset Library uses. */
+  /** Files dropped into the modal, through the same upload queue the Asset Library uses. */
   private uploads = createUploadQueue({
     post: postAssetFile,
     onChange: (items) => this.onUploadChange(items),
   });
   private insertedUploads = new Set<string>();
 
-  constructor(options: ModalControllerOptions) {
+  constructor(options: AssetPickerModalOptions) {
     this.allAssets = [...options.initialAssets];
-    this.insertSnippet = options.insertSnippet;
-    this.applyFormatting = options.applyFormatting;
-    this.onAssetPickedForHero = options.onAssetPickedForHero;
+    this.onInsertSnippet = options.onInsertSnippet;
+    this.onSetFeaturedImage = options.onSetFeaturedImage;
 
-    this.initDrawerListeners();
-    this.initToolbarListeners();
-    this.initBlockInsertionListeners();
-    this.initAssetModalListeners();
+    this.initEventListeners();
   }
 
-  public setPanel(panel: "settings" | "blocks" | "none"): void {
-    this.activePanel = panel;
-    if (panel === "none") {
-      this.drawer?.classList.remove("open");
-      this.toggleSettingsBtn?.classList.remove("active");
-      this.toggleBlocksBtn?.classList.remove("active");
-    } else if (panel === "settings") {
-      this.drawer?.classList.add("open");
-      this.settingsPanel?.classList.add("active");
-      this.blocksPanel?.classList.remove("active");
-      if (this.drawerHeading) this.drawerHeading.textContent = "Article Settings";
-      this.toggleSettingsBtn?.classList.add("active");
-      this.toggleBlocksBtn?.classList.remove("active");
-    } else if (panel === "blocks") {
-      this.drawer?.classList.add("open");
-      this.blocksPanel?.classList.add("active");
-      this.settingsPanel?.classList.remove("active");
-      if (this.drawerHeading) this.drawerHeading.textContent = "Component Blocks";
-      this.toggleBlocksBtn?.classList.add("active");
-      this.toggleSettingsBtn?.classList.remove("active");
+  public open(target: "editor" | "featured"): void {
+    if (!this.assetModal) return;
+    this.pickerTarget = target;
+    this.pickedAsset = null;
+
+    if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
+    if (this.confirmAssetModalBtn) {
+      this.confirmAssetModalBtn.disabled = true;
+      this.confirmAssetModalBtn.textContent =
+        target === "featured" ? "Set as Featured Image" : "Insert into Article";
     }
+    if (this.selectedAssetInfo) {
+      this.selectedAssetInfo.innerHTML = `<span class="placeholder-text">Click an asset to select it</span>`;
+    }
+
+    this.switchModalTab("library");
+    this.renderModalAssets();
+    this.assetModal.showModal();
   }
 
-  private initDrawerListeners(): void {
-    this.toggleSettingsBtn?.addEventListener("click", () => {
-      this.setPanel(this.activePanel === "settings" ? "none" : "settings");
-    });
-
-    this.toggleBlocksBtn?.addEventListener("click", () => {
-      this.setPanel(this.activePanel === "blocks" ? "none" : "blocks");
-    });
-
-    this.drawerCloseBtn?.addEventListener("click", () => {
-      this.setPanel("none");
-    });
+  public close(): void {
+    this.assetModal?.close();
   }
 
-  private initToolbarListeners(): void {
-    document.querySelectorAll(".tool-btn[data-tool]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const tool = (btn as HTMLElement).dataset.tool;
-        if (tool) this.applyFormatting(tool);
-      });
-    });
-  }
+  private initEventListeners(): void {
+    this.openAssetModalBtn?.addEventListener("click", () => this.open("editor"));
+    this.browseHeroImageBtn?.addEventListener("click", () => this.open("featured"));
 
-  /**
-   * Every insertion button carries its own DSL snippet, stamped in by the drawer from
-   * the Block Registry. This controller knows nothing about individual block types.
-   */
-  private initBlockInsertionListeners(): void {
-    document.querySelectorAll(".btn-insert-block, .btn-callout").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const snippet = (btn as HTMLElement).dataset.snippet;
-        if (snippet) this.insertSnippet(snippet);
-      });
-    });
-  }
-
-  private initAssetModalListeners(): void {
-    this.openAssetModalBtn?.addEventListener("click", () => this.openAssetPicker("editor"));
-    this.browseHeroImageBtn?.addEventListener("click", () => this.openAssetPicker("featured"));
-
-    this.closeAssetModalBtn?.addEventListener("click", () => this.assetModal.close());
-    this.cancelAssetModalBtn?.addEventListener("click", () => this.assetModal.close());
+    this.closeAssetModalBtn?.addEventListener("click", () => this.close());
+    this.cancelAssetModalBtn?.addEventListener("click", () => this.close());
 
     this.modalTabBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -144,9 +100,9 @@ export class ModalController {
       if (!this.pickedAsset) return;
 
       if (this.pickerTarget === "featured") {
-        this.onAssetPickedForHero(this.pickedAsset.url);
+        this.onSetFeaturedImage?.(this.pickedAsset.url);
       } else {
-        this.insertSnippet(
+        this.onInsertSnippet?.(
           `\n${insertionForAsset({
             url: this.pickedAsset.url,
             mimeType: this.pickedAsset.mimeType,
@@ -155,7 +111,7 @@ export class ModalController {
           })}\n`
         );
       }
-      this.assetModal.close();
+      this.close();
     });
 
     this.modalDropzone?.addEventListener("click", () => this.modalFileInput?.click());
@@ -175,27 +131,11 @@ export class ModalController {
     });
 
     this.modalFileInput?.addEventListener("change", () => {
-      if (this.modalFileInput.files?.length) {
+      if (this.modalFileInput?.files?.length) {
         this.uploads.enqueue(this.modalFileInput.files);
       }
-      this.modalFileInput.value = "";
+      if (this.modalFileInput) this.modalFileInput.value = "";
     });
-  }
-
-  private openAssetPicker(target: "editor" | "featured"): void {
-    this.pickerTarget = target;
-    this.pickedAsset = null;
-    if (this.modalUploadStatus) this.modalUploadStatus.textContent = "";
-    if (this.confirmAssetModalBtn) {
-      this.confirmAssetModalBtn.disabled = true;
-      this.confirmAssetModalBtn.textContent = target === "featured" ? "Set as Featured Image" : "Insert into Article";
-    }
-    if (this.selectedAssetInfo) {
-      this.selectedAssetInfo.innerHTML = `<span class="placeholder-text">Click an asset to select it</span>`;
-    }
-    this.switchModalTab("library");
-    this.renderModalAssets();
-    this.assetModal.showModal();
   }
 
   private switchModalTab(tab: "library" | "upload"): void {
@@ -244,7 +184,7 @@ export class ModalController {
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span>${a.filename.split('.').pop()?.toUpperCase() || "FILE"}</span>
+            <span>${a.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
           </div>
         `;
       }
@@ -268,11 +208,6 @@ export class ModalController {
     }
   }
 
-  /**
-   * Each finished upload joins the modal's library and is inserted where the editor asked.
-   * The modal stays open so a refusal can be read and retried, rather than closing itself
-   * the moment one file succeeds.
-   */
   private onUploadChange(items: readonly UploadItem[]): void {
     for (const item of items) {
       if (item.status !== "done" || !item.asset || this.insertedUploads.has(item.id)) continue;
@@ -287,11 +222,11 @@ export class ModalController {
     this.allAssets.unshift({ ...asset, description: "" });
 
     if (this.pickerTarget === "featured") {
-      this.onAssetPickedForHero(asset.url);
+      this.onSetFeaturedImage?.(asset.url);
       return;
     }
 
-    this.insertSnippet(
+    this.onInsertSnippet?.(
       `\n${insertionForAsset({
         url: asset.url,
         mimeType: asset.mimeType,

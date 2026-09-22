@@ -12,6 +12,12 @@ export const youtubeBlock: BlockDefinition<YouTubeProps> = {
   schema: youtubeSchema,
   supportsStretch: true,
   defaultProps: { title: "YouTube video player", stretch: "wide" },
+  drawer: {
+    description: "Responsive video embed",
+    preview: '<YouTube id="..." title="..." stretch="wide" />',
+    insertLabel: "YouTube Video",
+    order: 4,
+  },
   snippet: `<YouTube id="dQw4w9WgXcQ" title="Video Title" stretch="wide" />`,
   generateJsonLd: (props) => {
     if (!props.id) return null;

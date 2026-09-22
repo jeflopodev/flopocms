@@ -6,6 +6,7 @@ import { getMediaStorage, type MediaStorage } from "./media-storage";
 import { createD1LockStore, type LockStore } from "./locks";
 import { systemClock, type Clock } from "./clock";
 import { createD1PostStore, type PostStore } from "./post-store";
+import { createD1AssetRegistry, type AssetRegistry } from "./asset-registry";
 import { createLocalArticleMirror, type ArticleMirror } from "./article-mirror";
 
 export { systemClock, type Clock };
@@ -30,6 +31,8 @@ export interface Services {
   mirror: ArticleMirror;
   contents: GithubContents | null;
   media: MediaStorage;
+  /** Media assets and upload metadata. */
+  assets: AssetRegistry;
   clock: Clock;
 }
 
@@ -44,6 +47,7 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
         : null;
 
   const clock = overrides.clock ?? systemClock;
+  const media = overrides.media ?? getMediaStorage(contents);
 
   return {
     db,
@@ -51,7 +55,9 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
     locks: overrides.locks ?? createD1LockStore(db, clock),
     mirror: overrides.mirror ?? createLocalArticleMirror(),
     contents,
-    media: overrides.media ?? getMediaStorage(contents),
+    media,
+    assets: overrides.assets ?? createD1AssetRegistry(db, media),
     clock,
   };
 }
+

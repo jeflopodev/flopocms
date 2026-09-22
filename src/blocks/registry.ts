@@ -1,4 +1,4 @@
-import type { BlockDefinition, EditorInsertion } from "./types";
+import type { BlockDefinition, EditorBlockDrawerMeta, EditorInsertion } from "./types";
 import { paragraphBlock } from "./paragraph";
 import { headingBlock } from "./heading";
 import { calloutBlock } from "./callout";
@@ -82,58 +82,6 @@ export function getCombinedBlockStyles(): string {
 ].forEach(registerBlock);
 
 /**
- * Editor drawer model.
- *
- * The drawer renders from this, so adding a block to the drawer adds no markup, and the
- * snippet it inserts is the block's own. Labels, icons and insertions come from the
- * definitions, keeping the registry the one place a block is described.
- */
-interface DrawerEntry {
-  type: string;
-  description: string;
-  preview: string;
-  insertLabel: string;
-}
-
-const DRAWER: DrawerEntry[] = [
-  {
-    type: "callout",
-    description: "Accessible alert callouts",
-    preview: '<Callout variant="note">...</Callout>',
-    insertLabel: "Callout",
-  },
-  {
-    type: "list",
-    description: "Nested list with custom list-style-type",
-    preview: '<List type="unordered">...</List>',
-    insertLabel: "Complex List",
-  },
-  {
-    type: "amazon-product",
-    description: "Product showcase with global assets",
-    preview: '<AmazonProduct asin="B0..." price="$..." image="/uploads/..." />',
-    insertLabel: "Product Block",
-  },
-  {
-    type: "youtube",
-    description: "Responsive video embed",
-    preview: '<YouTube id="..." title="..." stretch="wide" />',
-    insertLabel: "YouTube Video",
-  },
-  {
-    type: "related-posts",
-    description: "Other published Articles, read by category",
-    preview: '<RelatedPosts category="Astro" limit={3} />',
-    insertLabel: "Related Posts",
-  },
-  {
-    type: "schema",
-    description: "Structured FAQ / Article JSON-LD",
-    preview: '<Schema type="FAQPage">...</Schema>',
-    insertLabel: "Schema Block",
-  },
-];
-
 export interface EditorBlockCard {
   type: string;
   tagName: string;
@@ -146,27 +94,24 @@ export interface EditorBlockCard {
 }
 
 /**
- * The block cards the editor drawer renders, in order. A block with no DrawerEntry never
+ * The block cards the editor drawer renders, in order. A block with no drawer metadata never
  * shows a card, which is how the toolbar-only blocks stay out of the drawer.
  */
 export function getEditorBlockCards(): EditorBlockCard[] {
-  return DRAWER.flatMap((entry) => {
-    const block = getBlock(entry.type);
-    if (!block) return [];
-
-    return [
-      {
-        type: block.type,
-        tagName: block.tagName,
-        label: block.label,
-        description: entry.description,
-        icon: block.icon,
-        category: block.category,
-        preview: entry.preview,
-        insertions: block.insertions?.length
-          ? block.insertions
-          : [{ label: `+ Insert ${entry.insertLabel}`, snippet: block.snippet }],
-      },
-    ];
-  });
+  return getAllBlocks()
+    .filter((block): block is BlockDefinition & { drawer: EditorBlockDrawerMeta } => Boolean(block.drawer))
+    .sort((a, b) => (a.drawer.order ?? 99) - (b.drawer.order ?? 99))
+    .map((block) => ({
+      type: block.type,
+      tagName: block.tagName,
+      label: block.label,
+      description: block.drawer.description,
+      icon: block.icon,
+      category: block.category,
+      preview: block.drawer.preview,
+      insertions: block.insertions?.length
+        ? block.insertions
+        : [{ label: `+ Insert ${block.drawer.insertLabel || block.label}`, snippet: block.snippet }],
+    }));
 }
+

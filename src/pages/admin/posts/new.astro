@@ -2,41 +2,17 @@
 export const prerender = false;
 
 import { createServices } from "../../../lib/services";
-import type { PostRecord } from "../../../lib/post-store";
+import { createDraftPost } from "../../../lib/post-lifecycle";
 
 const services = createServices(Astro.locals);
-
 const user = Astro.locals.user || { username: "jeflopo" };
 
-const id = crypto.randomUUID();
-const suffix = Math.random().toString(36).substring(2, 7);
-const slug = `untitled-${suffix}`;
-const now = new Date().toISOString();
+const result = await createDraftPost({ actor: user, services });
 
-const draft: PostRecord = {
-  id,
-  slug,
-  title: "Untitled Article",
-  description: "",
-  category: "General",
-  tags: "[]",
-  author: user.username,
-  featuredImage: "",
-  contentMdx: "",
-  status: "draft",
-  template: "default",
-  defaultWidth: "60rem",
-  wideWidth: "70rem",
-  pubDate: now,
-  createdAt: now,
-  updatedAt: now,
-};
-
-try {
-  await services.posts.save(draft);
-} catch (err) {
-  console.error("Failed to create new draft post:", err);
+if (!result.success || !result.id) {
+  return Astro.redirect("/admin/posts");
 }
 
-return Astro.redirect(`/admin/posts/${id}`);
+return Astro.redirect(`/admin/posts/${result.id}`);
 ---
+

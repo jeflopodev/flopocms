@@ -28,6 +28,12 @@ export const calloutBlock: BlockDefinition<CalloutProps> = {
   schema: calloutSchema,
   supportsStretch: true,
   defaultProps: { variant: "note", stretch: "default" },
+  drawer: {
+    description: "Accessible alert callouts",
+    preview: '<Callout variant="note">...</Callout>',
+    insertLabel: "Callout",
+    order: 1,
+  },
   insertions: Object.keys(defaultTitles).map((variant) => ({
     label: defaultTitles[variant],
     snippet: `<Callout variant="${variant}">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>`,

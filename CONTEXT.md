@@ -69,7 +69,7 @@ The dependency-free module (`src/lib/asset-rules.ts`) that decides what counts a
 _Avoid_: Validation utils, upload constants
 
 **Asset Registry**:
-A D1 database table (`assets`) and module tracking uploaded media assets, variants, metadata, and post/article associations alongside their central public upload paths (`public/uploads/`).
+The central asset management seam (`src/lib/asset-registry.ts`) on `Services` coordinating uploaded media asset records in D1 with physical byte storage in Media Storage behind a single typed interface (`upload`, `delete`, `updateMetadata`, `list`, `find`).
 _Avoid_: Media library, file table
 
 **Media Storage**:
@@ -77,7 +77,7 @@ The storage module that persists raw media asset bytes to their target environme
 _Avoid_: File driver, S3 adapter
 
 **Post Lifecycle**:
-The domain module coordinating article validation, Concurrency Lock verification, Post Bundle serialization, commits to `main` through GitHub Contents, and Cloudflare D1 persistence through the Post Store.
+The domain module coordinating all article state transitions (draft creation, post duplication, article validation, Concurrency Lock verification, Post Bundle serialization, commits to `main` through GitHub Contents, and Cloudflare D1 persistence through the Post Store).
 _Avoid_: Post service, article manager
 
 **Post Store**:

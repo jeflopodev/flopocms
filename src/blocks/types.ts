@@ -49,6 +49,13 @@ export interface EditorInsertion {
   snippet: string;
 }
 
+export interface EditorBlockDrawerMeta {
+  description: string;
+  preview: string;
+  insertLabel?: string;
+  order?: number;
+}
+
 export interface BlockDefinition<TProps = any, TData = any> {
   /** Canonical block type identifier, e.g. "paragraph", "callout", "youtube" */
   type: string;
@@ -79,6 +86,13 @@ export interface BlockDefinition<TProps = any, TData = any> {
    * (e.g. one per Callout variant). When absent, the drawer offers `snippet` alone.
    */
   insertions?: EditorInsertion[];
+
+  /**
+   * Presentation metadata for the Editor Blocks Drawer.
+   * When defined, the block appears as a card in the drawer.
+   * When absent or omitted, the block is excluded from the drawer (e.g. toolbar-only blocks).
+   */
+  drawer?: EditorBlockDrawerMeta;
 
   /** Whether this block supports CSS breakout stretch ("default" | "wide" | "full" | custom) */
   supportsStretch?: boolean;
