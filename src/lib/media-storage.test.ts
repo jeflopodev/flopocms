@@ -30,6 +30,7 @@ describe("GitHubMediaAdapter", () => {
       deleteFile: async () => ({ success: true, deleted: false }),
       deleteDirectory: async () => ({ success: true, deleted: false }),
       commitFiles: async () => ({ success: false, error: "quota exceeded" }),
+      listDirectory: async () => ({ success: true, paths: [] }),
     });
 
     const res = await media.writeMedia({ filename: "big.zip", content: new Uint8Array([1]) });

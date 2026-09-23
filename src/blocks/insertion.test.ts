@@ -3,7 +3,7 @@ import type { BlockNode, InlineSpan, MarkDef } from "./types";
 import { parseDslToBlocks } from "./dsl/parser";
 import { renderDocument } from "./dsl/renderer";
 import { serializeBlocksToDsl } from "./dsl/serializer";
-import { assetKindFor, insertionForAsset } from "./insertion";
+import { assetKindFor, insertionForAsset, referencedUploads } from "./insertion";
 
 const imageAsset = {
   url: "/uploads/photo.webp",
@@ -100,6 +100,28 @@ describe("Asset Insertion", () => {
 
     expect(blocks).toHaveLength(1);
     expect(blocks[0].props.alt).toBe("He said &quot;hi&quot;");
+  });
+
+  it("reads back every upload a body points at, once each", () => {
+    const body = [
+      '<Image src="/uploads/photo.webp" alt="cat" />',
+      '<Paragraph><Link href="/uploads/q3-report.pdf" download="q3-report.pdf">Q3</Link></Paragraph>',
+      '<Image src="/uploads/photo.webp" alt="again" />',
+    ].join("\n");
+
+    expect(referencedUploads({ contentMdx: body })).toEqual(["photo.webp", "q3-report.pdf"]);
+  });
+
+  it("reads the featured image and ignores anything not under /uploads/", () => {
+    expect(
+      referencedUploads({
+        contentMdx: '<Paragraph>Remote <Link href="https://cdn.example/x.png">x</Link></Paragraph>',
+        featuredImage: "/uploads/hero.webp",
+      })
+    ).toEqual(["hero.webp"]);
+
+    expect(referencedUploads({})).toEqual([]);
+    expect(referencedUploads({ contentMdx: "", featuredImage: "" })).toEqual([]);
   });
 
   it("treats everything but image/* as a file", () => {

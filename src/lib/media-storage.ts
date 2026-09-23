@@ -18,7 +18,8 @@ export interface MediaStorage {
 }
 
 /** Uploads land in the global Asset Registry path, so every Article can reference them. */
-const UPLOADS_PREFIX = "public/uploads/";
+export const UPLOADS_DIR = "public/uploads";
+const UPLOADS_PREFIX = `${UPLOADS_DIR}/`;
 
 export class GitHubMediaAdapter implements MediaStorage {
   constructor(private readonly contents: GithubContents) {}

@@ -55,6 +55,44 @@ function escapeAttribute(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/**
+ * The stored filenames a body plus featured image point at under `/uploads/`.
+ *
+ * The inverse of `insertionForAsset`: whatever that function can write, this reads
+ * back, so Post Lifecycle can verify every referenced byte exists on `main` before
+ * the publish commit lands. Sorted and distinct; anything not under `/uploads/`
+ * (bundled images, remote URLs) is not an upload and is ignored.
+ */
+export function referencedUploads(input: { contentMdx?: string | null; featuredImage?: string | null }): string[] {
+  const found = new Set<string>();
+
+  const take = (url: string | null | undefined) => {
+    if (!url) return;
+    const clean = url.split("?")[0].split("#")[0];
+    const marker = "/uploads/";
+    const at = clean.indexOf(marker);
+    if (at === -1) return;
+    let name = clean.slice(at + marker.length).split("/").filter(Boolean).pop() || "";
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      // Keep the raw spelling: verification compares names, it never fetches this.
+    }
+    if (name) found.add(name);
+  };
+
+  // `<Image src="...">` and `<Link href="...">` carry the references; one pattern
+  // covers both spellings plus any hand-typed variant of them.
+  const body = input.contentMdx || "";
+  const pattern = /\/uploads\/[^\s"'<>()]+/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(body)) !== null) take(match[0]);
+
+  take(input.featuredImage);
+
+  return [...found].sort();
+}
+
 export function insertionForAsset(input: AssetInsertionInput): string {
   const name = (input.label || input.filename || nameFromUrl(input.url) || "asset").trim() || "asset";
   const url = escapeAttribute(input.url);

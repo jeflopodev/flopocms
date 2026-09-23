@@ -155,8 +155,8 @@ stateDiagram-v2
 3. **Renderability Verification**: Passes content through `inspectDocument`. If content contains unrenderable syntax or suspect tags for a published post, the operation is refused with HTTP 422 before touching D1 or GitHub.
 4. **The Write Path Follows the Authority**: `main` is written before the editorial record describes it. A publish lands the Post Bundle in one atomic commit and then projects the row to `published`; an unpublish removes the bundle directory in one atomic commit and then moves the row to draft. A refused commit changes nothing (502, or 409 on a stale `expected_sha`/`expected_ref`); publishing without a GitHub PAT is refused with HTTP 503. Saves carry `Idempotency-Key` for safe retry. A projection write that fails leaves the Article live with a stale record, reported as `projectedToD1: false` (see ADR-0012).
 5. **Git Synchronization**:
-   - When publishing: lands Post Bundle (`src/content/blog/<slug>/index.mdx`) on `main` via `contents.commitFiles` (blobs → tree → commit → ref `force:false`).
-   - When unpublishing: removes the Post Bundle directory from `main` via `contents.deleteDirectory` (one atomic commit).
+   - When publishing: verifies every `/uploads/` reference in the body plus the featured image against `public/uploads/` on `main` (one `listDirectory`), refusing with 422 naming any absent file, then lands the Post Bundle (`src/content/blog/<slug>/index.mdx`) on `main` via `contents.commitFiles` (blobs → tree → commit → ref `force:false`). Upload and delete commits are their own adds and deletes; the publish never rewrites bytes.
+   - When unpublishing: removes the Post Bundle directory from `main` via `contents.deleteDirectory` (one atomic commit). Shared asset bytes stay: other Articles may reference them.
    - In local development, mirrors changes to the filesystem (`src/content/blog/`) via `ArticleMirror`.
 
 ### 3.3. JSX Block DSL & Unified Document Renderer

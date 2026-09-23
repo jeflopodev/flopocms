@@ -306,6 +306,58 @@ describe("publishing an Article", () => {
     expect(posts.all()).toEqual([]);
   });
 
+  it("refuses to publish a bundle whose upload is absent on main", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+
+    const res = await savePostLifecycle({
+      payload: payload({
+        status: "published",
+        content_mdx: '<Image src="/uploads/hero.webp" alt="hero" />',
+      }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 422 });
+    expect(res.error).toContain('"/uploads/hero.webp"');
+    expect(posts.all()).toEqual([]);
+    expect(contents.commits).toEqual([]);
+  });
+
+  it("publishes when every referenced upload is on main", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+    contents.seedFile("public/uploads/hero.webp", "bytes");
+
+    const res = await savePostLifecycle({
+      payload: payload({
+        status: "published",
+        content_mdx: '<Image src="/uploads/hero.webp" alt="hero" />',
+      }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: true, committedToGitHub: true });
+    expect(posts.all()[0].status).toBe("published");
+  });
+
+  it("refuses to publish when the featured image was deleted from main", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+
+    const res = await savePostLifecycle({
+      payload: payload({ status: "published", featured_image: "/uploads/gone.webp" }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 422 });
+    expect(res.error).toContain('"/uploads/gone.webp"');
+    expect(contents.commits).toEqual([]);
+  });
+
   it("refuses a publish based on a stale ref", async () => {
     const posts = new InMemoryPostStore();
     const contents = new InMemoryGithubContents();

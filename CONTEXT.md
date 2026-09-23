@@ -110,6 +110,10 @@ _Avoid_: Media gallery, asset browser, asset grid
 The storage module that persists raw media asset bytes to their target environment (GitHub REST API under `public/uploads/` on production Workers, or local filesystem in development) behind a unified interface.
 _Avoid_: File driver, S3 adapter
 
+**Asset Bytes**:
+The files under `public/uploads/` on `main`, written once at upload and removed once at delete, never rewritten at publish. A bundle referencing absent bytes refuses to publish.
+_Avoid_: Staged upload, pending media
+
 ### Editorial Surfaces
 
 **Admin Dashboard**:

@@ -139,6 +139,19 @@ describe("GithubContents", () => {
     expect(contents.has("a.txt")).toBe(false);
   });
 
+  it("lists the files inside a directory and counts an absent one as empty", async () => {
+    const contents = new InMemoryGithubContents();
+    contents.seedFile("public/uploads/hero.webp", "bytes");
+    contents.seedFile("public/uploads/report.pdf", "bytes");
+    contents.seedFile("src/content/blog/hello/index.mdx", "body");
+
+    expect(await contents.listDirectory("public/uploads")).toEqual({
+      success: true,
+      paths: ["public/uploads/hero.webp", "public/uploads/report.pdf"],
+    });
+    expect(await contents.listDirectory("public/missing")).toEqual({ success: true, paths: [] });
+  });
+
   it("leaves nothing behind when an atomic commit fails", async () => {
     const contents = new InMemoryGithubContents();
     contents.failNextCommit("500 Internal Server Error");

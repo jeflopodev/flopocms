@@ -79,6 +79,12 @@ export interface GithubContents {
   deleteDirectory(path: string, commit: AtomicCommitRequest): Promise<ContentsResult>;
 
   /**
+   * Lists the full paths of the files directly inside a directory. An absent
+   * directory counts as empty rather than an error, so callers never branch on it.
+   */
+  listDirectory(path: string): Promise<ContentsResult & { paths?: string[] }>;
+
+  /**
    * Lands every file in one atomic commit via blobs → tree → commit → ref
    * (`force: false`). Either `main` holds the whole change or none of it.
    */
@@ -254,19 +260,26 @@ export class HttpGithubContents implements GithubContents {
     }
   }
 
-  async deleteDirectory(path: string, commit: AtomicCommitRequest): Promise<ContentsResult> {
-    let items: any[];
+  async listDirectory(path: string): Promise<ContentsResult & { paths?: string[] }> {
     try {
       const listRes = await fetch(this.url(path, this.branch), { headers: this.headers() });
-      if (!listRes.ok) return { success: true, deleted: false };
+      if (listRes.status === 404) return { success: true, paths: [] };
+      if (!listRes.ok) return { success: false, error: await listRes.text() };
       const listed = await listRes.json();
-      if (!Array.isArray(listed)) return { success: true, deleted: false };
-      items = listed;
+      if (!Array.isArray(listed)) return { success: true, paths: [] };
+      const paths = listed
+        .filter((item) => item?.type === "file" && typeof item.path === "string")
+        .map((item) => item.path as string);
+      return { success: true, paths };
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to list directory on GitHub" };
     }
+  }
 
-    const paths = items.filter((item) => item?.type === "file" && item.path).map((item) => item.path as string);
+  async deleteDirectory(path: string, commit: AtomicCommitRequest): Promise<ContentsResult> {
+    const listed = await this.listDirectory(path);
+    if (!listed.success) return listed;
+    const paths = listed.paths ?? [];
     if (paths.length === 0) return { success: true, deleted: false };
 
     // One atomic commit for the whole bundle, not one DELETE per file.
@@ -462,9 +475,15 @@ export class InMemoryGithubContents implements GithubContents {
     return { success: true, deleted: existed };
   }
 
-  async deleteDirectory(path: string, commit: AtomicCommitRequest): Promise<ContentsResult> {
+  async listDirectory(path: string): Promise<ContentsResult & { paths?: string[] }> {
     const prefix = path.endsWith("/") ? path : `${path}/`;
-    const children = [...this.files.keys()].filter((key) => key.startsWith(prefix));
+    return { success: true, paths: [...this.files.keys()].filter((key) => key.startsWith(prefix)) };
+  }
+
+  async deleteDirectory(path: string, commit: AtomicCommitRequest): Promise<ContentsResult> {
+    const listed = await this.listDirectory(path);
+    if (!listed.success) return listed;
+    const children = listed.paths ?? [];
     if (children.length === 0) return { success: true, deleted: false };
 
     return this.commitFiles(

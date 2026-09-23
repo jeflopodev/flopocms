@@ -1,5 +1,7 @@
 import { inspectDocument, type DocumentProblem } from "../blocks/dsl/parser";
+import { referencedUploads } from "../blocks/insertion";
 import { BLOG_DIR } from "./article-mirror";
+import { UPLOADS_DIR } from "./media-storage";
 import type { ArticleWriteModel } from "./article-write-model";
 import { toPostRecord } from "./article-write-model";
 import type { PostRecord } from "./post-store";
@@ -315,6 +317,44 @@ export async function savePostLifecycle(options: {
       }
     }
 
+    // Uploads commit at upload time and deletes commit at delete time, so a file
+    // the bundle references but `main` does not have means someone deleted it after
+    // it was inserted. Refuse rather than ship a reader a broken image or download.
+    const neededUploads = referencedUploads({
+      contentMdx: record.contentMdx,
+      featuredImage: record.featuredImage,
+    });
+    if (neededUploads.length > 0) {
+      const listed = await contents.listDirectory(UPLOADS_DIR);
+      if (!listed.success) {
+        console.error("GitHub uploads listing error:", listed.error);
+        return {
+          success: false,
+          status: 502,
+          id,
+          slug: record.slug,
+          error: `Nothing was published: could not verify asset bytes on main (${listed.error}).`,
+        };
+      }
+      const present = new Set(
+        (listed.paths ?? []).map((entry) => entry.split("/").filter(Boolean).pop() as string)
+      );
+      const missing = neededUploads.filter((name) => !present.has(name));
+      if (missing.length > 0) {
+        const quoted = missing.map((name) => `"/uploads/${name}"`).join(", ");
+        return {
+          success: false,
+          status: 422,
+          problems: inspection.problems,
+          id,
+          slug: record.slug,
+          error:
+            `Cannot publish: ${quoted} ${missing.length === 1 ? "is" : "are"} referenced ` +
+            `but absent on main (deleted?). Re-upload ${missing.length === 1 ? "it" : "them"} or remove the reference.`,
+        };
+      }
+    }
+
     const commit = await contents.commitFiles([{ path: targetPath, content: bundle }], {
       message: `feat(blog): publish "${title}" by @${author}`,
       baseRefSha: expectedRef,
@@ -430,6 +470,8 @@ export async function deletePostLifecycle(options: {
       };
     }
 
+    // Shared asset bytes under `public/uploads/` stay: other Articles may reference
+    // them, and an upload's commit is its own add. Only the bundle goes.
     // Legacy flat files from before Post Bundles existed
     const legacyMdx = await contents.deleteFile(`${BLOG_DIR}/${slug}.mdx`, {
       message: `feat(blog): delete post ${slug}.mdx`,
