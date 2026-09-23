@@ -1,13 +1,12 @@
 ---
-import RootLayout from "#/layouts/root-layout.astro";
-import { getTemplateComponent } from "../../templates";
-import { renderDocument } from "../../blocks/dsl";
-import { createEnvironmentReadModel, toTemplateProps, type Article } from "../../lib/article";
+import ArticleDisplay from "../../components/article-display.astro";
+import { createEnvironmentReadModel, type Article } from "../../lib/article";
 import { createGitBundleSource } from "../../lib/article-sources/git-bundle";
 
 /**
- * Production reads the published Post Bundles from main at build time. The same read
- * model serves Live Draft Preview, which is why both render identical markup.
+ * Production reads the published Post Bundles from main at build time, and renders them
+ * through Article Display — the same module Live Draft Preview renders through, which is
+ * what keeps the two identical.
  */
 export async function getStaticPaths() {
   // Built inside this function from imports only: getStaticPaths is hoisted out of the
@@ -23,25 +22,6 @@ type Props = { article: Article };
 
 const { article } = Astro.props;
 const articles = createEnvironmentReadModel(createGitBundleSource());
-
-const { html, jsonLd, styles } = await renderDocument(article.content, {
-  articles,
-  post: {
-    id: article.slug,
-    slug: article.slug,
-    title: article.title,
-    author: article.author,
-    category: article.category,
-  },
-});
-
-const Template = getTemplateComponent(article.template);
 ---
 
-<RootLayout hasMain={false} jsonLd={jsonLd} title={article.title} description={article.description}>
-	<Template {...toTemplateProps(article)}>
-		<Fragment set:html={html} />
-	</Template>
-</RootLayout>
-
-<style is:inline set:html={styles} />
+<ArticleDisplay article={article} articles={articles} mode="published" />

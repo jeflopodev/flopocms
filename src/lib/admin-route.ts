@@ -1,4 +1,4 @@
-import type { APIRoute } from "astro";
+import type { APIRoute, AstroCookies } from "astro";
 import type { Services } from "./services";
 import { createServices } from "./services";
 
@@ -23,6 +23,8 @@ export interface AdminRouteRequest {
   request: Request;
   url: URL;
   params: Record<string, string | undefined>;
+  /** The request's cookies, so a route that changes credentials can name its own session. */
+  cookies: AstroCookies;
   locals: App.Locals;
 }
 
@@ -48,7 +50,7 @@ function statusOf(result: unknown): number {
 }
 
 export function adminRoute(handler: (context: AdminRouteRequest) => Promise<AdminRouteResult>): APIRoute {
-  return async ({ request, locals, params }) => {
+  return async ({ request, locals, params, cookies }) => {
     const user = locals.user;
     if (!user) return json({ success: false, error: "Unauthorized" }, 401);
 
@@ -59,6 +61,7 @@ export function adminRoute(handler: (context: AdminRouteRequest) => Promise<Admi
         request,
         url: new URL(request.url),
         params: params as Record<string, string | undefined>,
+        cookies,
         locals,
       });
 

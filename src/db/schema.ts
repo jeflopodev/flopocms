@@ -43,9 +43,6 @@ export const posts = sqliteTable(
     defaultWidth: text("default_width").default("60rem").notNull(),
     wideWidth: text("wide_width").default("70rem").notNull(),
     pubDate: text("pub_date").default(sql`CURRENT_TIMESTAMP`).notNull(),
-    gitBranch: text("git_branch"),
-    prNumber: integer("pr_number"),
-    prUrl: text("pr_url"),
     createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
     updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   },
@@ -74,6 +71,15 @@ export const postLocks = sqliteTable(
     index("idx_post_locks_expires_at").on(table.expiresAt),
   ]
 );
+
+export const idempotencyKeys = sqliteTable("idempotency_keys", {
+  /** Client `Idempotency-Key` per explicit save intent. */
+  key: text("key").primaryKey(),
+  /** JSON `{ status, body }` to replay. */
+  response: text("response").notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
 
 export const assets = sqliteTable(
   "assets",
@@ -107,6 +113,9 @@ export type NewPost = typeof posts.$inferInsert;
 
 export type PostLock = typeof postLocks.$inferSelect;
 export type NewPostLock = typeof postLocks.$inferInsert;
+
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type NewIdempotencyKey = typeof idempotencyKeys.$inferInsert;
 
 export type Asset = typeof assets.$inferSelect;
 export type NewAsset = typeof assets.$inferInsert;

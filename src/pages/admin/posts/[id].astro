@@ -32,7 +32,14 @@ if (!loaded) {
 }
 
 const post: PostRecord = loaded;
-const user = Astro.locals.user || { id: "unknown", username: post.author || "jeflopo" };
+
+// The middleware authenticates every /admin path, so there is no anonymous Editor to
+// invent here — a page that reached this point without one would be a routing mistake.
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/admin/login");
+}
+
 let initialLock: LockResult = { success: true, locked: false, isOwner: false };
 try {
   initialLock = await services.locks.status(post.id, user.id);
@@ -56,6 +63,25 @@ try {
   }
 } catch {
   if (post.tags) parsedTags = [post.tags];
+}
+
+// Compare-and-swap base the next publish/unpublish checks against: the bundle
+// blob sha (`null` expects absent) and the `main` ref sha. Undefined when git
+// is unavailable, which disables the precondition rather than blocking the save.
+let expectedSha: string | null | undefined = undefined;
+let expectedRef: string | undefined = undefined;
+if (services.contents) {
+  try {
+    const bundle = await services.contents.readFile(`src/content/blog/${post.slug}/index.mdx`);
+    expectedSha = bundle?.sha ?? null;
+  } catch {
+    expectedSha = undefined;
+  }
+  try {
+    expectedRef = (await services.contents.refSha()) ?? undefined;
+  } catch {
+    expectedRef = undefined;
+  }
 }
 
 const rawPubDate = post.pubDate;
@@ -524,7 +550,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
                 type="text"
                 id="modal-asset-search"
                 class="form-control"
-                placeholder="Search assets by filename..."
+                placeholder="Search by filename, title, or alt text..."
               />
             </div>
             <div id="modal-assets-grid" class="modal-assets-grid">
@@ -572,6 +598,8 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
       content_mdx: post.contentMdx || "",
       isInitiallyLocked: initialLock.locked,
       lockUser: initialLock.lock?.username || "",
+      expected_sha: expectedSha,
+      expected_ref: expectedRef,
     })} />
 
     <script id="initial-assets-data" type="application/json" set:html={JSON.stringify(initialAssets)} />

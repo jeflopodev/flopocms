@@ -8,6 +8,8 @@ import { systemClock, type Clock } from "./clock";
 import { createD1PostStore, type PostStore } from "./post-store";
 import { createD1AssetRegistry, type AssetRegistry } from "./asset-registry";
 import { createLocalArticleMirror, type ArticleMirror } from "./article-mirror";
+import { createD1EditorAccounts, type EditorAccounts } from "./editor-accounts";
+import { createD1IdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 
 export { systemClock, type Clock };
 
@@ -33,6 +35,10 @@ export interface Services {
   media: MediaStorage;
   /** Media assets and upload metadata. */
   assets: AssetRegistry;
+  /** Who the caller is: credentials and sessions. */
+  accounts: EditorAccounts;
+  /** Idempotent save replay, keyed by client `Idempotency-Key`. */
+  idempotency: IdempotencyStore;
   clock: Clock;
 }
 
@@ -57,6 +63,8 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
     contents,
     media,
     assets: overrides.assets ?? createD1AssetRegistry(db, media),
+    accounts: overrides.accounts ?? createD1EditorAccounts(db, clock),
+    idempotency: overrides.idempotency ?? createD1IdempotencyStore(db, clock),
     clock,
   };
 }

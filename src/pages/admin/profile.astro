@@ -2,8 +2,6 @@
 export const prerender = false;
 
 import AdminLayout from "../../layouts/AdminLayout.astro";
-import { eq, sql } from "drizzle-orm";
-import { users, posts, sessions } from "../../lib/db";
 import { createServices } from "../../lib/services";
 
 const user = Astro.locals.user;
@@ -11,39 +9,30 @@ if (!user) {
   return Astro.redirect("/admin/login");
 }
 
-const { db } = createServices(Astro.locals);
+const services = createServices(Astro.locals);
 
-// Fetch user account details
-const [userRecord] = await db
-  .select()
-  .from(users)
-  .where(eq(users.id, user.id))
-  .limit(1);
+// Identity comes from Editor Accounts and the Article counts from the Post Store: this
+// page owns neither, so neither rule is written twice.
+const profile = await services.accounts.profile(user.id, {
+  currentToken: Astro.cookies.get("admin_session")?.value,
+});
+const postStats = await services.posts.countsByAuthor(user.username);
 
-// Fetch stats for this user
-const [postStatsResult] = await db
-  .select({
-    total: sql<number>`COUNT(*)`,
-    published: sql<number>`SUM(CASE WHEN ${posts.status} = 'published' THEN 1 ELSE 0 END)`,
-    drafts: sql<number>`SUM(CASE WHEN ${posts.status} = 'draft' THEN 1 ELSE 0 END)`,
-  })
-  .from(posts)
-  .where(eq(posts.author, user.username));
+const stamp = (iso: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 
-const postStats = postStatsResult || {
-  total: 0,
-  published: 0,
-  drafts: 0,
-};
+const openSessions = (profile?.sessions ?? []).map((open) => ({
+  ...open,
+  startedLabel: stamp(open.createdAt),
+  endsLabel: stamp(open.expiresAt),
+}));
 
-const [sessionStatsResult] = await db
-  .select({ count: sql<number>`COUNT(*)` })
-  .from(sessions)
-  .where(eq(sessions.userId, user.id));
-
-const sessionStats = sessionStatsResult || { count: 1 };
-
-const rawDate = userRecord?.createdAt;
+const rawDate = profile?.createdAt;
 const createdAtFormatted = rawDate
   ? new Intl.DateTimeFormat("en-US", {
       month: "long",
@@ -92,7 +81,7 @@ const createdAtFormatted = rawDate
             </div>
             <div class="stat-item">
               <span class="stat-label">Active Sessions</span>
-              <span class="stat-value">{sessionStats.count || 1}</span>
+              <span class="stat-value">{openSessions.length || 1}</span>
             </div>
           </div>
         </div>
@@ -192,6 +181,59 @@ const createdAtFormatted = rawDate
         </div>
       </div>
     </div>
+
+    <!-- Open Sessions -->
+    <div class="card sessions-card">
+      <div class="card-header">
+        <div class="header-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="18" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Open Sessions</h2>
+          <p class="card-subtitle">
+            Every device signed in as @{user.username}. A session lasts 30 days unless it is ended here.
+          </p>
+        </div>
+      </div>
+
+      <div id="sessions-feedback" class="alert-box" style="display: none;"></div>
+
+      {openSessions.length === 0 ? (
+        <p class="card-subtitle">No open sessions.</p>
+      ) : (
+        <ul class="sessions-list">
+          {openSessions.map((open) => (
+            <li class="session-row">
+              <div class="session-where">
+                <span class="session-label">
+                  {open.current ? "This device" : "Another device"}
+                </span>
+                <span class="session-dates">
+                  Started {open.startedLabel} · ends {open.endsLabel}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary session-end-btn"
+                data-session-id={open.id}
+              >
+                {open.current ? "Sign out here" : "End session"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div class="form-actions">
+        <button type="button" id="sign-out-everywhere" class="btn btn-danger">
+          Sign out everywhere
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -281,6 +323,55 @@ const createdAtFormatted = rawDate
           <span>Update Password</span>
         `;
       }
+    });
+
+    // Ending a session re-renders the list, which only the server can produce.
+    const sessionsFeedback = document.getElementById("sessions-feedback") as HTMLDivElement | null;
+    const signOutEverywhereBtn = document.getElementById("sign-out-everywhere") as HTMLButtonElement | null;
+
+    function showSessionsAlert(message: string, type: "success" | "error") {
+      if (!sessionsFeedback) return;
+      sessionsFeedback.className = `alert-box alert-${type}`;
+      sessionsFeedback.textContent = message;
+      sessionsFeedback.style.display = "block";
+    }
+
+    async function endSession(url: string, body: Record<string, unknown> = {}) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          showSessionsAlert(data.error || "Could not end that session.", "error");
+          return;
+        }
+
+        // The cookie is gone with the session, so the sign-in page is the only place to be.
+        if (data.signedOut) {
+          window.location.href = "/admin/login";
+          return;
+        }
+
+        window.location.reload();
+      } catch {
+        showSessionsAlert("Error connecting to server. Please try again.", "error");
+      }
+    }
+
+    document.querySelectorAll(".session-end-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sessionId = (btn as HTMLElement).dataset.sessionId;
+        if (sessionId) endSession("/api/admin/profile/sessions/end", { sessionId });
+      });
+    });
+
+    signOutEverywhereBtn?.addEventListener("click", () => {
+      signOutEverywhereBtn.setAttribute("disabled", "true");
+      endSession("/api/admin/profile/sessions/end-all");
     });
   </script>
 </AdminLayout>
@@ -577,5 +668,71 @@ const createdAtFormatted = rawDate
   .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--bg-body);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .btn-secondary:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+  }
+
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  /* Open Sessions */
+  .sessions-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .sessions-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .session-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .session-row:first-child {
+    border-top: none;
+  }
+
+  .session-where {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .session-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .session-dates {
+    font-size: 0.8rem;
+    color: var(--text-muted);
   }
 </style>

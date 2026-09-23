@@ -68,13 +68,14 @@ flowchart TB
 
 ### Key Tenets
 
-1. **Dual Authority Model ([ADR-0011](file:///e:/repos/astro/blog/docs/adr/0011-published-article-authority.md))**:
+1. **Dual Authority Model ([ADR-0011](file:///e:/repos/astro/blog/docs/adr/0011-published-article-authority.md), [ADR-0012](file:///e:/repos/astro/blog/docs/adr/0012-projector-owned-published-view-and-atomic-publishing.md))**:
    - **`main` is authoritative for published Article content and metadata**. The Git bundle (`src/content/blog/<slug>/index.mdx`) is the ultimate source of truth for readers.
    - **Cloudflare D1 is authoritative for Draft content and editorial state** (including pessimistic Concurrency Locks, editor accounts, and session tokens).
-   - Published rows in D1 `posts` table are a fast projection of `main`. Divergence between `main` and D1 is treated as a defect state to be detected, not an alternative source of truth.
+   - Published rows in D1 `posts` table are a disposable Published View of `main`, written only by the projector. Publishing lands bundle plus new assets in one atomic commit; convergence is a retrying loop (save-path fast-project plus deploy full-project), not a report.
 2. **Deterministic Parity via Unified Document Renderer ([ADR-0010](file:///e:/repos/astro/blog/docs/adr/0010-structured-jsx-block-dsl-and-pluggable-registry.md))**:
    - Content is authored and stored in a structured **JSX Block DSL** rather than Markdown.
    - Regex parsing has been eliminated. The parser and renderer (`src/blocks/dsl/`) produce identical HTML markup, CSS stylesheets, and Schema.org JSON-LD graphs across both **Live Draft Preview** and **Production Builds**.
+   - Both surfaces render through **Article Display**, which owns the template choice, the props the Post Template reads, the Block context and the page's meta — so parity is a property of one module rather than a convention two pages keep, and `article-display.test.ts` asserts it by rendering one Article both ways.
 3. **Deep Modules & Clean Seams**:
    - Complex workflows (draft creation, duplication, saving, validation, git synchronization, media asset registration, and locking) are encapsulated inside deep modules with narrow, minimal interfaces.
    - External dependencies (database, Git API, storage, clock) sit behind pluggable adapters defined on the `Services` seam (`src/lib/services.ts`), allowing the entire domain to be tested in-memory with sub-2-second test execution.
@@ -118,13 +119,15 @@ export interface Services {
   contents: GithubContents | null;
   media: MediaStorage;
   assets: AssetRegistry;
+  accounts: EditorAccounts;
+  idempotency: IdempotencyStore;
   clock: Clock;
 }
 ```
 
 - **`PostStore` (`src/lib/post-store.ts`)**: Editorial record persistence seam. Implemented by `createD1PostStore` in production and `InMemoryPostStore` for tests.
 - **`LockStore` (`src/lib/locks.ts`)**: Pessimistic locking seam with time-to-live verification. Implemented by `createD1LockStore` and `InMemoryLockStore`.
-- **`GithubContents` (`src/lib/github-contents.ts`)**: The sole gateway to GitHub's REST API (`PUT /contents`, `DELETE /contents`, `deleteBranch`). Uses `HttpGithubContents` or `InMemoryGithubContents`.
+- **`GithubContents` (`src/lib/github-contents.ts`)**: The sole gateway to GitHub's REST API, reading, writing and removing files (a Post Bundle under `src/content/blog/`, or media under `public/uploads/`). Nothing branches: ADR-0009 made publishing a direct commit to `main`, so the module's verb list has no branch in it. Uses `HttpGithubContents` or `InMemoryGithubContents`.
 - **`MediaStorage` (`src/lib/media-storage.ts`)**: Stores asset bytes (commit to `public/uploads/` via GitHub in production, or write to local disk during local development).
 - **`AssetRegistry` (`src/lib/asset-registry.ts`)**: Unified seam synchronizing D1 asset records and `MediaStorage` bytes.
 - **`Clock` (`src/lib/clock.ts`)**: Abstraction over time (`systemClock` vs. `FixedClock`), ensuring zero non-deterministic timestamps in tests.
@@ -137,9 +140,9 @@ The `PostLifecycle` module (`src/lib/post-lifecycle.ts`) is a **deep module** en
 stateDiagram-v2
     [*] --> Draft: createDraftPost()
     Draft --> Draft: savePostLifecycle(status: 'draft')\n[Persist D1 only]
-    Draft --> Published: savePostLifecycle(status: 'published')\n[Persist D1 + Commit to main]
-    Published --> Draft: savePostLifecycle(status: 'draft')\n[Persist D1 + Delete from main]
-    Published --> Published: savePostLifecycle(status: 'published')\n[Update D1 + Update main]
+    Draft --> Published: savePostLifecycle(status: 'published')\n[Commit to main + project into D1]
+    Published --> Draft: savePostLifecycle(status: 'draft')\n[Delete from main + persist D1]
+    Published --> Published: savePostLifecycle(status: 'published')\n[Update main + update D1]
     Published --> [*]: deletePostLifecycle()\n[Remove D1 + Delete bundle on main]
     Draft --> [*]: deletePostLifecycle()\n[Remove D1]
     Draft --> DraftCopy: duplicatePostLifecycle()
@@ -150,10 +153,10 @@ stateDiagram-v2
 1. **Concurrency Lock Check**: Verifies that the acting user holds the active pessimistic lock (returns HTTP 423 if held by another editor).
 2. **Slug Invariants**: Validates slug format (`^[a-z0-9]+(?:-[a-z0-9]+)*$`) and checks uniqueness across all posts.
 3. **Renderability Verification**: Passes content through `inspectDocument`. If content contains unrenderable syntax or suspect tags for a published post, the operation is refused with HTTP 422 before touching D1 or GitHub.
-4. **Guaranteed Local Persistence**: The D1 database record is always saved first.
+4. **The Write Path Follows the Authority**: `main` is written before the editorial record describes it. A publish lands the Post Bundle in one atomic commit and then projects the row to `published`; an unpublish removes the bundle directory in one atomic commit and then moves the row to draft. A refused commit changes nothing (502, or 409 on a stale `expected_sha`/`expected_ref`); publishing without a GitHub PAT is refused with HTTP 503. Saves carry `Idempotency-Key` for safe retry. A projection write that fails leaves the Article live with a stale record, reported as `projectedToD1: false` (see ADR-0012).
 5. **Git Synchronization**:
-   - When publishing: writes Post Bundle (`src/content/blog/<slug>/index.mdx`) directly to `main` via `contents.putFile`.
-   - When unpublishing: removes the Post Bundle from `main` via `contents.deleteFile`.
+   - When publishing: lands Post Bundle (`src/content/blog/<slug>/index.mdx`) on `main` via `contents.commitFiles` (blobs → tree → commit → ref `force:false`).
+   - When unpublishing: removes the Post Bundle directory from `main` via `contents.deleteDirectory` (one atomic commit).
    - In local development, mirrors changes to the filesystem (`src/content/blog/`) via `ArticleMirror`.
 
 ### 3.3. JSX Block DSL & Unified Document Renderer
@@ -247,12 +250,13 @@ src/scripts/editor/
 
 1. **Password Hashing (`src/lib/auth.ts`)**:
    - Secure PBKDF2 key derivation (`PBKDF2-HMAC-SHA256`) with 100,000 iterations and cryptographically random 16-byte salts.
-2. **Session Model (`src/lib/session.ts`)**:
-   - Secure, random 32-byte hexadecimal session tokens stored in the `sessions` table.
-   - HttpOnly, Secure, SameSite cookies with 7-day expiration.
+2. **Editor Accounts (`src/lib/editor-accounts.ts`)**:
+   - The one place an Editor is identified: credentials are verified and sessions issued, validated and revoked there, over a private Account Store seam (D1 through Drizzle, or an in-memory substitute).
+   - Sessions are random 32-byte hexadecimal tokens in the `sessions` table, and they last 30 days; `admin_session` is HttpOnly, Secure and SameSite=Lax.
+   - A password change re-derives the hash with a fresh salt and ends every session except the one that made the change. An Editor can also end any of their open sessions, or all of them, from Profile & Security (`/api/admin/profile/sessions/*`).
 3. **Edge Middleware Guard (`src/middleware.ts`)**:
    - Intercepts all requests matching `/admin` and `/api/admin`.
-   - Resolves the active user and session from D1, attaching them to `Astro.locals`.
+   - Asks Editor Accounts who the `admin_session` token belongs to, and is the only writer of `Astro.locals.user`.
    - Redirects unauthenticated requests to `/admin/login` or returns 401 JSON for API endpoints.
 
 ---
@@ -286,13 +290,17 @@ src/scripts/editor/
     │   ├── asset-registry.ts     # Asset Registry seam & D1/MediaStorage coordination
     │   ├── asset-rules.ts        # Dependency-free asset validation rules
     │   ├── auth.ts               # PBKDF2 password hashing & verification
+    │   ├── editor-accounts.ts    # Editor credentials & sessions (D1 / InMemory)
     │   ├── github-contents.ts    # GitHub REST API adapter
     │   ├── locks.ts              # Pessimistic concurrency locks
     │   ├── media-storage.ts      # Byte persistence adapter (GitHub/disk)
     │   ├── post-lifecycle.ts     # Deep module managing all post state transitions
     │   ├── post-store.ts         # PostStore persistence seam (D1 / InMemory)
-    │   ├── services.ts           # Services seam resolving adapters at the edge
-    │   └── session.ts            # Session token management
+    │   ├── article-display.ts    # What an Article becomes per mode (published / preview)
+    │   ├── article-projection.ts # Article (main) → editorial record
+    │   └── services.ts           # Services seam resolving adapters at the edge
+    ├── components/
+    │   └── article-display.astro # The one place an Article becomes a page
     ├── pages/
     │   ├── admin/                # Edge-rendered editorial dashboard routes
     │   │   ├── posts/[id].astro  # Full-screen CodeMirror article editor

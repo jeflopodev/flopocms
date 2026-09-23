@@ -37,6 +37,13 @@ export const ArticleWriteModelSchema = v.object({
   wide_width: v.optional(v.string(), "70rem"),
   /** Absent or empty means "not published yet"; Post Lifecycle stamps the save time. */
   pub_date: v.optional(v.string()),
+  /**
+   * Compare-and-swap preconditions the Editor loaded with the Article.
+   * `expected_sha` is the bundle blob sha (`null` expects absent); `expected_ref`
+   * is the `main` ref sha the commit bases itself on. Both absent means no precondition.
+   */
+  expected_sha: v.optional(v.nullable(v.string())),
+  expected_ref: v.optional(v.string()),
 });
 
 export type ArticleWriteModel = v.InferOutput<typeof ArticleWriteModelSchema>;

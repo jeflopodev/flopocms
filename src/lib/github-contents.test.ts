@@ -90,9 +90,69 @@ describe("GithubContents", () => {
     expect(contents.has("src/content/blog/post-2-extra/index.mdx")).toBe(true);
   });
 
-  it("removes a branch", async () => {
+  it("refuses a stale write with a conflict instead of overwriting", async () => {
     const contents = new InMemoryGithubContents();
-    expect(await contents.deleteBranch("content/legacy-slug")).toBe(true);
-    expect(contents.deletedBranches).toEqual(["content/legacy-slug"]);
+    const first = await contents.putFile("a.txt", "one", { message: "first" });
+    const stale = await contents.putFile("a.txt", "two", { message: "second", expectedSha: "sha-stale" });
+
+    expect(stale).toMatchObject({ success: false, conflict: true });
+    expect((await contents.readFile("a.txt"))?.sha).toBe(first.sha);
+  });
+
+  it("refuses a create-only write when the path already exists", async () => {
+    const contents = new InMemoryGithubContents();
+    contents.seedFile("a.txt", "one");
+
+    const res = await contents.putFile("a.txt", "two", { message: "create", expectedSha: null });
+    expect(res).toMatchObject({ success: false, conflict: true });
+    expect((await contents.readFile("a.txt"))?.content).toBe("one");
+  });
+
+  it("lands every file in one atomic commit", async () => {
+    const contents = new InMemoryGithubContents();
+
+    const res = await contents.commitFiles(
+      [
+        { path: "src/content/blog/hello/index.mdx", content: "body" },
+        { path: "public/uploads/hero.webp", content: new Uint8Array([1, 2, 3]) },
+      ],
+      { message: "feat(blog): publish" }
+    );
+
+    expect(res).toMatchObject({ success: true });
+    expect(res.commitSha).toBeTruthy();
+    expect(contents.has("src/content/blog/hello/index.mdx")).toBe(true);
+    expect(contents.has("public/uploads/hero.webp")).toBe(true);
+  });
+
+  it("refuses an atomic commit based on a stale ref", async () => {
+    const contents = new InMemoryGithubContents();
+    const baseRef = contents.currentRef();
+    await contents.putFile("other.txt", "other", { message: "other" });
+
+    const res = await contents.commitFiles([{ path: "a.txt", content: "one" }], {
+      message: "stale",
+      baseRefSha: baseRef,
+    });
+
+    expect(res).toMatchObject({ success: false, conflict: true });
+    expect(contents.has("a.txt")).toBe(false);
+  });
+
+  it("leaves nothing behind when an atomic commit fails", async () => {
+    const contents = new InMemoryGithubContents();
+    contents.failNextCommit("500 Internal Server Error");
+
+    const res = await contents.commitFiles(
+      [
+        { path: "a.txt", content: "one" },
+        { path: "b.txt", content: "two" },
+      ],
+      { message: "fail" }
+    );
+
+    expect(res.success).toBe(false);
+    expect(contents.has("a.txt")).toBe(false);
+    expect(contents.has("b.txt")).toBe(false);
   });
 });

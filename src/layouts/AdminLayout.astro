@@ -8,7 +8,11 @@ interface Props {
 }
 
 const { title = "Admin Dashboard", activeTab = "posts", fullWidth = false } = Astro.props;
-const user = Astro.locals.user || { username: "editor" };
+
+// The middleware is the only writer of this, and it answers 401 for every admin path, so
+// an AdminLayout without an Editor is a routing mistake rather than a visitor.
+const user = Astro.locals.user;
+if (!user) throw new Error("AdminLayout rendered without an authenticated Editor");
 ---
 
 <!doctype html>

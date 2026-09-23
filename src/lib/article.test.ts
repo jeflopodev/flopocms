@@ -112,7 +112,7 @@ describe("toTemplateProps", () => {
   });
 });
 
-describe("diffArticleStores", () => {
+describe("projector invariant (diffArticleStores)", () => {
   it("reports a published D1 row whose bundle main does not have", () => {
     const divergences = diffArticleStores([], [article({ slug: "ghost" })]);
     expect(divergences).toEqual([

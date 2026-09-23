@@ -27,6 +27,9 @@ export interface SaveOutcome {
   statusState?: SaveTarget;
   message?: string;
   error?: string;
+  /** Fresh CAS base for the next save, when the server reports one. */
+  sha?: string;
+  commitSha?: string;
 }
 
 export interface SessionSnapshot {
@@ -44,12 +47,17 @@ export interface EditorSessionOptions {
   initialStatus: SaveTarget;
   initialReadOnly?: boolean;
   initialLockedBy?: string;
+  initialExpectedSha?: string | null;
+  initialExpectedRef?: string;
   /** Reads the Article body. Supplied by the CodeMirror adapter. */
   readContent: () => string;
   /** Reads the metadata fields. Supplied by the DOM adapter. */
   readMetadata: () => EditableArticleFields;
-  /** Persists the Article. Rejections are treated as transport errors. */
-  persist: (payload: ArticleWriteModel) => Promise<SaveOutcome>;
+  /**
+   * Persists the Article. Rejections are treated as transport errors.
+   * The key identifies one explicit save intent across retries.
+   */
+  persist: (payload: ArticleWriteModel, options: { idempotencyKey: string }) => Promise<SaveOutcome>;
 }
 
 export class EditorSession {
@@ -58,6 +66,8 @@ export class EditorSession {
   private slug: string;
   private readOnly: boolean;
   private lockedBy?: string;
+  private expectedSha?: string | null;
+  private expectedRef?: string;
   private message = "Saved to D1";
   private listeners = new Set<(snapshot: SessionSnapshot) => void>();
 
@@ -66,6 +76,8 @@ export class EditorSession {
     this.slug = options.initialSlug;
     this.readOnly = Boolean(options.initialReadOnly);
     this.lockedBy = options.initialLockedBy;
+    this.expectedSha = options.initialExpectedSha;
+    this.expectedRef = options.initialExpectedRef;
   }
 
   subscribe(listener: (snapshot: SessionSnapshot) => void): () => void {
@@ -109,20 +121,27 @@ export class EditorSession {
   async saveRequested(target: SaveTarget = this.status): Promise<void> {
     if (this.readOnly || this.phase === "saving") return;
 
-    // The Article Write Model, composed from its three owners: the Settings Panel's
-    // fields, the body, and the status the Editor asked for.
+    // The Article Write Model, composed from its owners: the Settings Panel's
+    // fields, the body, the status the Editor asked for, and the CAS base loaded
+    // with the Article. One key per explicit intent, so a retry never commits twice.
     const payload: ArticleWriteModel = {
       ...this.options.readMetadata(),
       id: this.options.postId,
       content_mdx: this.options.readContent(),
       status: target,
+      expected_sha: this.expectedSha,
+      expected_ref: this.expectedRef,
     };
+    const idempotencyKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     this.set("saving", target === "published" ? "Publicando en GitHub & D1..." : "Guardando en D1...");
 
     let outcome: SaveOutcome;
     try {
-      outcome = await this.options.persist(payload);
+      outcome = await this.options.persist(payload, { idempotencyKey });
     } catch {
       this.set("error", "Error de red");
       return;
@@ -131,6 +150,8 @@ export class EditorSession {
     if (outcome.ok) {
       this.status = outcome.statusState || target;
       this.slug = outcome.slug || this.slug;
+      if (outcome.sha !== undefined) this.expectedSha = outcome.sha;
+      if (outcome.commitSha) this.expectedRef = outcome.commitSha;
       this.set(
         "saved",
         outcome.message || (this.status === "published" ? "Publicado en GitHub & D1" : "Borrador guardado en D1")

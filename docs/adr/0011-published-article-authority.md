@@ -20,3 +20,11 @@ That ambiguity is the thing worth recording, because the obvious reading — "D1
 - The reconciler becomes a divergence check between the two stores, not a writer of truth.
 - Public pages stay statically built from the Git bundle; the runtime D1 adapter serves preview and admin.
 - Two adapters satisfy one seam, which is what makes the seam real.
+
+## Amendment (2026-09-22)
+
+Decision 3 has a write-path counterpart the decision never stated, and the save path chose the wrong side of it. The D1 row was written as `published` first and the bundle committed to `main` second, so a refused commit left a row claiming published that no reader could ever see — the defect state decision 3 exists to detect. `post-lifecycle.test.ts` asserts exactly that outcome, and the mirror case is untested: a Draft save flips the row before deleting the bundle from `main`, so a refused delete leaves `main` serving an Article the editorial record calls a Draft (`status-differs`).
+
+**The write path follows the authority.** A publish commits the Post Bundle to `main` first and moves the row to `published` after; an unpublish removes the bundle from `main` first and moves the row to draft after. A refused commit therefore changes nothing and stays a refusal rather than a half-published Article, and a failed projection write leaves the Article live with a stale projection — the failure worth having, because a later save re-projects it. Publishing is refused outright when no GitHub PAT is configured, since publishing without one can only manufacture `missing-from-main`. An explicit re-projection clears a stale record without waiting for someone to open the Article.
+
+Decision 3 also promised that a published row whose bundle is absent from `main` is "surfaced in the Admin Dashboard". It is detected by the deploy gate (`pnpm run check:divergence`) and nowhere else; that surface is still owed, and the re-projection action belongs beside it.

@@ -1,9 +1,7 @@
 export const prerender = false;
 
-import { eq } from "drizzle-orm";
 import { adminRoute, readJson } from "../../../../lib/admin-route";
-import { users } from "../../../../lib/db";
-import { generateSalt, hashPassword, verifyPassword } from "../../../../lib/auth";
+import { MIN_PASSWORD_LENGTH } from "../../../../lib/editor-accounts";
 
 interface ChangePasswordPayload {
   currentPassword?: string;
@@ -11,7 +9,17 @@ interface ChangePasswordPayload {
   confirmPassword?: string;
 }
 
-export const POST = adminRoute(async ({ request, user, services }) => {
+/** What each refusal from the module answers with. Credential policy stays in the module. */
+const REFUSALS = {
+  "wrong-password": { status: 400, error: "Incorrect current password." },
+  "too-short": {
+    status: 400,
+    error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters long.`,
+  },
+  "no-such-editor": { status: 404, error: "User account not found." },
+} as const;
+
+export const POST = adminRoute(async ({ request, user, services, cookies }) => {
   const raw = await readJson(request);
   if (!raw.ok) return { success: false, status: 400, error: raw.error };
 
@@ -25,26 +33,15 @@ export const POST = adminRoute(async ({ request, user, services }) => {
     return { success: false, status: 400, error: "New password and confirmation do not match." };
   }
 
-  if (newPassword.length < 8) {
-    return { success: false, status: 400, error: "New password must be at least 8 characters long." };
-  }
+  const change = await services.accounts.changePassword({
+    editorId: user.id,
+    currentPassword,
+    newPassword,
+    // The Editor keeps working in this tab; every other session ends.
+    keepToken: cookies.get("admin_session")?.value,
+  });
 
-  const { db } = services;
-  const [userRecord] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-
-  if (!userRecord) {
-    return { success: false, status: 404, error: "User account not found." };
-  }
-
-  const isCurrentValid = await verifyPassword(currentPassword, userRecord.salt, userRecord.passwordHash);
-  if (!isCurrentValid) {
-    return { success: false, status: 400, error: "Incorrect current password." };
-  }
-
-  const newSalt = generateSalt();
-  const newHash = await hashPassword(newPassword, newSalt);
-
-  await db.update(users).set({ passwordHash: newHash, salt: newSalt }).where(eq(users.id, user.id));
+  if (!change.ok) return { success: false, ...REFUSALS[change.reason] };
 
   return { success: true, message: "Password updated successfully!" };
 });

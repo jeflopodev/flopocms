@@ -3,6 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { execSync } from "node:child_process";
+// The credential policy lives with Editor Accounts; this script used to carry a second
+// copy of PBKDF2. Node strips the types itself, so the module is importable as written —
+// and only `auth.ts`, which imports nothing, is reached from here.
+import { generateSalt, hashPassword } from "../src/lib/auth.ts";
 
 // Simple .env parser to avoid extra dependencies
 function loadEnv() {
@@ -24,40 +28,6 @@ function loadEnv() {
 }
 
 loadEnv();
-
-async function hashPassword(password, salt) {
-  const encoder = new TextEncoder();
-  const passwordKey = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits"]
-  );
-
-  const derivedBits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: encoder.encode(salt),
-      iterations: 100000,
-      hash: "SHA-256",
-    },
-    passwordKey,
-    256
-  );
-
-  return Array.from(new Uint8Array(derivedBits))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function generateSalt() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 async function main() {
   const args = process.argv.slice(2);

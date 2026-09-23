@@ -5,7 +5,7 @@ import { toPostRecord } from "./article-write-model";
 import type { PostRecord } from "./post-store";
 import type { Services } from "./services";
 
-export interface PostMdxData {
+export interface PostBundleData {
   title: string;
   description?: string;
   /** Required: Post Lifecycle decides the publication date, not the serializer. */
@@ -31,11 +31,15 @@ export interface SavePostResult {
   lockedBy?: string;
   id?: string;
   slug?: string;
-  gitBranch?: string | null;
-  prNumber?: number | null;
-  prUrl?: string | null;
   committedToGitHub?: boolean;
-  merged?: boolean;
+  /**
+   * False when main holds the Article but the editorial record could not be written.
+   * The Article is live and the record is stale, which a re-save or a re-projection clears.
+   */
+  projectedToD1?: boolean;
+  /** Bundle blob sha and commit sha to base the next save on. */
+  sha?: string;
+  commitSha?: string;
   statusState?: "draft" | "published";
   message?: string;
   updated_at?: string;
@@ -44,17 +48,23 @@ export interface SavePostResult {
 
 export interface DeletePostResult {
   success: boolean;
+  status?: number;
+  /** True when main had a bundle to remove. False when there was nothing there. */
   deletedFromGitHub: boolean;
   error?: string;
 }
 
 /**
- * Pure function: formats and serializes post attributes into standard YAML frontmatter + MDX body.
+ * Pure function: formats an Article's attributes into the Post Bundle's frontmatter and body.
+ *
+ * The file it produces is still `index.mdx` — that name is the content collection's, not this
+ * module's — but what it writes is the JSX Block DSL, which is why neither this function nor
+ * its input is named for Markdown any more.
  *
  * Zero side-effects and no clock of its own: a serializer that reached for the current time
  * was a fourth place the present moment was read, in a module already handed one.
  */
-export function serializePostMdx(data: PostMdxData): string {
+export function serializePostBundle(data: PostBundleData): string {
   const {
     title,
     description = "",
@@ -183,7 +193,7 @@ export async function savePostLifecycle(options: {
   const record = toPostRecord(payload, { existing, now, author });
 
   // 5. Serialize the Post Bundle
-  const mdxContent = serializePostMdx({
+  const bundle = serializePostBundle({
     title: record.title,
     description: record.description,
     pubDate: record.pubDate,
@@ -196,58 +206,176 @@ export async function savePostLifecycle(options: {
     contentMdx: record.contentMdx,
   });
 
-  // 6. Guaranteed persistence: the editorial record is written before anything else
-  await posts.save(record);
-
-  // 7. Git Sync: Published Articles are authoritative on main, Drafts stay in D1
+  // 6. The write path follows the authority: `main` holds published content, so the bundle
+  //    is committed before the editorial record claims the Article is published, and
+  //    removed before the record calls it a Draft again. A refused commit therefore
+  //    changes nothing rather than leaving a row no reader can see.
   const targetPath = `${BLOG_DIR}/${record.slug}/index.mdx`;
-  const legacyBranch = `content/${cleanSlug}`;
-  const gitResult = { committed: false, message: "" };
+  let committedToGitHub = false;
+  let lastCommitSha: string | undefined;
+  let message = "";
 
-  if (isDraft) {
-    if (existing?.status === "published" && contents) {
-      const unpublish = await contents.deleteFile(targetPath, {
+  const wasPublished = existing?.status === "published";
+
+  const expectedSha = payload.expected_sha;
+  const expectedRef = payload.expected_ref;
+  const bundleDir = `${BLOG_DIR}/${record.slug}`;
+
+  if (isDraft && wasPublished) {
+    if (!contents) {
+      return {
+        success: false,
+        status: 503,
+        id,
+        slug: record.slug,
+        error:
+          "Cannot move this Article back to a Draft: no GitHub PAT is configured, so the published bundle on main cannot be removed.",
+      };
+    }
+
+    if (expectedSha !== undefined) {
+      const current = await contents.readFile(targetPath);
+      const currentSha = current?.sha ?? null;
+      if (currentSha !== expectedSha) {
+        return {
+          success: false,
+          status: 409,
+          id,
+          slug: record.slug,
+          error: `Nothing changed: "${record.slug}" moved on main. Reload and merge.`,
+        };
+      }
+      if (currentSha === null) {
+        message = "Unpublished! Post moved back to draft in D1.";
+      } else {
+        const unpublish = await contents.deleteDirectory(bundleDir, {
+          message: `feat(blog): unpublish "${title}" (moved to draft)`,
+          baseRefSha: expectedRef,
+        });
+
+        if (!unpublish.success) {
+          console.error("GitHub unpublish error:", unpublish.error);
+          return {
+            success: false,
+            status: unpublish.conflict ? 409 : 502,
+            id,
+            slug: record.slug,
+            error: unpublish.conflict
+              ? `Nothing changed: "${record.slug}" moved on main. Reload and merge.`
+              : `Nothing changed: main refused to remove the published bundle (${unpublish.error}).`,
+          };
+        }
+
+        message = "Unpublished! Post moved back to draft in D1.";
+      }
+    } else {
+      const unpublish = await contents.deleteDirectory(bundleDir, {
         message: `feat(blog): unpublish "${title}" (moved to draft)`,
       });
-      void contents.deleteBranch(legacyBranch);
-      gitResult.message = unpublish.success
-        ? "Unpublished! Post moved back to draft in D1."
-        : `Draft saved to D1, but unpublishing from GitHub failed: ${unpublish.error}`;
-    } else {
-      gitResult.message = "Draft saved successfully to D1.";
+
+      if (!unpublish.success) {
+        console.error("GitHub unpublish error:", unpublish.error);
+        return {
+          success: false,
+          status: unpublish.conflict ? 409 : 502,
+          id,
+          slug: record.slug,
+          error: unpublish.conflict
+            ? `Nothing changed: "${record.slug}" moved on main. Reload and merge.`
+            : `Nothing changed: main refused to remove the published bundle (${unpublish.error}).`,
+        };
+      }
+
+      message = "Unpublished! Post moved back to draft in D1.";
     }
-  } else if (contents) {
-    const commit = await contents.putFile(targetPath, mdxContent, {
+  } else if (isDraft) {
+    message = "Draft saved successfully to D1.";
+  } else {
+    if (!contents) {
+      return {
+        success: false,
+        status: 503,
+        id,
+        slug: record.slug,
+        error: "Cannot publish: no GitHub PAT is configured, so there is no main to publish to.",
+      };
+    }
+
+    if (expectedSha !== undefined) {
+      const current = await contents.readFile(targetPath);
+      const currentSha = current?.sha ?? null;
+      if (currentSha !== expectedSha) {
+        return {
+          success: false,
+          status: 409,
+          id,
+          slug: record.slug,
+          error: `Nothing was published: "${record.slug}" moved on main. Reload and merge.`,
+        };
+      }
+    }
+
+    const commit = await contents.commitFiles([{ path: targetPath, content: bundle }], {
       message: `feat(blog): publish "${title}" by @${author}`,
+      baseRefSha: expectedRef,
     });
 
-    if (commit.success) {
-      gitResult.committed = true;
-      gitResult.message = "Published to main on GitHub & saved to D1.";
-      void contents.deleteBranch(legacyBranch);
-    } else {
+    if (!commit.success) {
       console.error("GitHub commit to main error:", commit.error);
-      gitResult.message = `Saved to D1, but GitHub publish failed: ${commit.error}`;
+      return {
+        success: false,
+        status: commit.conflict ? 409 : 502,
+        id,
+        slug: record.slug,
+        error: commit.conflict
+          ? `Nothing was published: "${record.slug}" moved on main. Reload and merge.`
+          : `Nothing was published: GitHub refused the commit (${commit.error}).`,
+      };
     }
-  } else {
-    gitResult.message = "Saved to D1 as published (GitHub PAT not configured).";
+
+    committedToGitHub = true;
+    lastCommitSha = commit.commitSha;
+    message = "Published to main on GitHub & saved to D1.";
+  }
+
+  // 7. The projection: the record now describes what main holds. A projection that fails
+  //    leaves the Article live with a stale record, which is the failure worth having —
+  //    the next save repairs it, and nothing a reader can see is wrong.
+  let projectedToD1 = true;
+  try {
+    await posts.save(record);
+  } catch (err: any) {
+    projectedToD1 = false;
+    console.error("Editorial record projection failed:", err);
+    message = isDraft
+      ? "Removed from main. The editorial record still says published — re-project it to repair."
+      : "Published to main. The editorial record is stale — re-project it to repair.";
   }
 
   // 8. Local development mirror, so the content collection sees the saved bundle
-  await mirror.write(record.slug, mdxContent);
+  await mirror.write(record.slug, bundle);
 
-  // The store clears the legacy branch-and-PR columns as part of the save above.
+  // Fresh base for the next save: the blob just written, or null when it is gone.
+  let freshSha: string | null | undefined;
+  if (committedToGitHub && contents) {
+    try {
+      freshSha = (await contents.readFile(targetPath))?.sha ?? null;
+    } catch {
+      freshSha = undefined;
+    }
+  }
+
   return {
     success: true,
     status: 200,
     id,
     slug: record.slug,
-    gitBranch: null,
-    prNumber: null,
-    prUrl: null,
     statusState: status,
-    committedToGitHub: gitResult.committed,
-    message: gitResult.message,
+    committedToGitHub,
+    projectedToD1,
+    sha: freshSha ?? undefined,
+    commitSha: lastCommitSha,
+    message,
     problems: inspection.problems,
     updated_at: now,
   };
@@ -270,18 +398,36 @@ export async function deletePostLifecycle(options: {
 
   const record = await posts.find(id);
   const slug = record?.slug?.trim().toLowerCase();
+  const wasPublished = record?.status === "published";
 
-  // 1. Delete the editorial record
-  await posts.remove(id);
-
-  // 2. Synchronize deletion with the published bundle on main
+  // 1. Main first, as publishing does: the bundle goes before the record that describes it,
+  //    so a refusal leaves an Article readers and the dashboard still agree about.
   let deletedFromGitHub = false;
-  if (contents && slug) {
+  if (slug && (contents || wasPublished)) {
+    if (!contents) {
+      return {
+        success: false,
+        status: 503,
+        deletedFromGitHub: false,
+        error:
+          "Cannot delete this Article: no GitHub PAT is configured, so the published bundle on main cannot be removed.",
+      };
+    }
+
     const bundle = await contents.deleteDirectory(`${BLOG_DIR}/${slug}`, {
       message: `feat(blog): delete "${slug}" bundle`,
     });
+
     if (!bundle.success) {
-      console.warn("GitHub bundle deletion warning:", bundle.error);
+      console.error("GitHub bundle deletion error:", bundle.error);
+      return {
+        success: false,
+        status: bundle.conflict ? 409 : 502,
+        deletedFromGitHub: false,
+        error: bundle.conflict
+          ? `Nothing was deleted: "${slug}" moved on main. Reload and merge.`
+          : `Nothing was deleted: main refused to remove the bundle (${bundle.error}).`,
+      };
     }
 
     // Legacy flat files from before Post Bundles existed
@@ -294,6 +440,9 @@ export async function deletePostLifecycle(options: {
 
     deletedFromGitHub = Boolean(bundle.deleted || legacyMdx.deleted || legacyMd.deleted);
   }
+
+  // 2. The editorial record goes once main has nothing left to serve
+  await posts.remove(id);
 
   // 3. Local Article mirror cleanup
   if (slug) {

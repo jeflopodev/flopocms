@@ -1,6 +1,6 @@
 # build output
 dist/
-# divergence-check artifacts (the build's Article snapshot and the D1 dump)
+# projector temp SQL (deleted after the deploy step runs)
 .review/
 # generated types
 .astro/

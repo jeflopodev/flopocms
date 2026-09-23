@@ -81,7 +81,6 @@ export function getCombinedBlockStyles(): string {
   imageBlock,
 ].forEach(registerBlock);
 
-/**
 export interface EditorBlockCard {
   type: string;
   tagName: string;

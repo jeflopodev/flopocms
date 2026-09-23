@@ -1,5 +1,11 @@
 import { insertionForAsset } from "../../blocks/insertion";
 import {
+  EMPTY_FILTER_MESSAGE,
+  assetLibraryView,
+  type AssetCard,
+  type AssetSummary,
+} from "../../lib/asset-library";
+import {
   createUploadQueue,
   postAssetFile,
   type UploadItem,
@@ -7,7 +13,7 @@ import {
 } from "../../lib/upload-queue";
 
 export interface AssetPickerModalOptions {
-  initialAssets: any[];
+  initialAssets: AssetSummary[];
   onInsertSnippet?: (snippet: string) => void;
   onSetFeaturedImage?: (url: string) => void;
 }
@@ -15,16 +21,20 @@ export interface AssetPickerModalOptions {
 /**
  * Asset Picker Modal.
  *
- * Owns only the asset selection dialog (`#editor-asset-modal`), asset searching,
- * tab switching between the library and upload dropzone, and the upload queue.
+ * Owns only the asset selection dialog (`#editor-asset-modal`), tab switching between the
+ * library and upload dropzone, and the upload queue.
+ *
+ * Which Assets are shown, and what each one says about itself, comes from the Asset
+ * Library's view model — the same rules the Asset Registry page reads, so searching
+ * alternative text works on both surfaces and only one of them has to know how.
  */
 export class AssetPickerModal {
-  private allAssets: any[];
+  private allAssets: AssetSummary[];
   private onInsertSnippet?: (snippet: string) => void;
   private onSetFeaturedImage?: (url: string) => void;
 
   private pickerTarget: "editor" | "featured" = "editor";
-  private pickedAsset: any = null;
+  private pickedAsset: AssetCard | null = null;
 
   // DOM Elements
   private assetModal = document.getElementById("editor-asset-modal") as HTMLDialogElement | null;
@@ -102,11 +112,13 @@ export class AssetPickerModal {
       if (this.pickerTarget === "featured") {
         this.onSetFeaturedImage?.(this.pickedAsset.url);
       } else {
+        // The card's alt text already falls back to the filename, so the insertion rule
+        // sees one label rather than deciding which field to trust.
         this.onInsertSnippet?.(
           `\n${insertionForAsset({
             url: this.pickedAsset.url,
             mimeType: this.pickedAsset.mimeType,
-            label: this.pickedAsset.altText || this.pickedAsset.title,
+            label: this.pickedAsset.altText,
             filename: this.pickedAsset.filename,
           })}\n`
         );
@@ -158,53 +170,48 @@ export class AssetPickerModal {
 
   private renderModalAssets(): void {
     if (!this.modalAssetsGrid) return;
-    const q = this.modalSearchInput?.value.trim().toLowerCase() || "";
-    const filtered = this.allAssets.filter((a: any) => {
-      if (!q) return true;
-      return a.filename.toLowerCase().includes(q) || (a.title && a.title.toLowerCase().includes(q));
-    });
 
-    if (filtered.length === 0) {
-      this.modalAssetsGrid.innerHTML = `<div class="modal-empty-state"><p>No assets found</p></div>`;
+    const cards = assetLibraryView(this.allAssets, { query: this.modalSearchInput?.value ?? "" });
+
+    if (cards.length === 0) {
+      this.modalAssetsGrid.innerHTML = `<div class="modal-empty-state"><p>${EMPTY_FILTER_MESSAGE}</p></div>`;
       return;
     }
 
     this.modalAssetsGrid.innerHTML = "";
-    for (const a of filtered) {
-      const card = document.createElement("div");
-      card.className = `modal-asset-item ${this.pickedAsset?.id === a.id ? "selected" : ""}`;
+    for (const card of cards) {
+      const item = document.createElement("div");
+      item.className = `modal-asset-item ${this.pickedAsset?.id === card.id ? "selected" : ""}`;
 
-      let thumb = "";
-      if (a.mimeType.startsWith("image/")) {
-        thumb = `<img src="${a.url}" alt="${a.filename}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'file-icon-badge\\'><span>IMG</span></div>';" />`;
-      } else {
-        thumb = `
+      const thumb =
+        card.kind === "image"
+          ? `<img src="${card.url}" alt="${card.altText}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'file-icon-badge\\'><span>IMG</span></div>';" />`
+          : `
           <div class="file-icon-badge">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span>${a.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
+            <span>${card.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
           </div>
         `;
-      }
 
-      card.innerHTML = `
+      item.innerHTML = `
         <div class="modal-asset-thumb">${thumb}</div>
-        <span class="modal-asset-name" title="${a.filename}">${a.filename}</span>
+        <span class="modal-asset-name" title="${card.filename}">${card.filename}</span>
       `;
 
-      card.addEventListener("click", () => {
+      item.addEventListener("click", () => {
         document.querySelectorAll(".modal-asset-item").forEach((el) => el.classList.remove("selected"));
-        card.classList.add("selected");
-        this.pickedAsset = a;
+        item.classList.add("selected");
+        this.pickedAsset = card;
         if (this.confirmAssetModalBtn) this.confirmAssetModalBtn.disabled = false;
         if (this.selectedAssetInfo) {
-          this.selectedAssetInfo.innerHTML = `<strong>Selected:</strong> <span>${a.filename}</span>`;
+          this.selectedAssetInfo.innerHTML = `<strong>Selected:</strong> <span>${card.filename}</span>`;
         }
       });
 
-      this.modalAssetsGrid.appendChild(card);
+      this.modalAssetsGrid.appendChild(item);
     }
   }
 
@@ -219,7 +226,13 @@ export class AssetPickerModal {
   }
 
   private acceptUploadedAsset(asset: UploadedAsset): void {
-    this.allAssets.unshift({ ...asset, description: "" });
+    // Just registered, so "now" is what it was created; the Library's default order is
+    // newest first, which is where an Asset the Editor just uploaded belongs.
+    this.allAssets.unshift({
+      ...asset,
+      createdAt: new Date().toISOString(),
+      description: "",
+    });
 
     if (this.pickerTarget === "featured") {
       this.onSetFeaturedImage?.(asset.url);

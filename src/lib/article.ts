@@ -209,8 +209,8 @@ export interface ArticleDivergence {
 }
 
 /**
- * Compares the two stores for the divergence check. Published content is authoritative
- * on `main`, so a published row that main does not have is reported rather than trusted.
+ * Projector invariant: the Published View must match `main`. Kept as a property test
+ * over the projector (project-then-project equals project), not as a dashboard report.
  */
 export function diffArticleStores(main: Article[], d1: Article[]): ArticleDivergence[] {
   const mainBySlug = new Map(main.map((article) => [article.slug, article]));

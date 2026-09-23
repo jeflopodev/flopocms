@@ -12,7 +12,11 @@ export const POST = adminRoute(async ({ request, services }) => {
 
   const result = await deletePostLifecycle({ id, services });
   if (!result.success) {
-    return { success: false, status: 400, error: result.error || "Failed to delete post" };
+    return {
+      success: false,
+      status: result.status ?? 400,
+      error: result.error || "Failed to delete post",
+    };
   }
 
   return { success: true, deletedFromGitHub: result.deletedFromGitHub };

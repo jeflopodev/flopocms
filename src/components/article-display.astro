@@ -1,0 +1,37 @@
+---
+import { renderDocument } from "../blocks/dsl";
+import { articleDisplayPlan, type DisplayMode } from "../lib/article-display";
+import type { Article, ArticleReadModel } from "../lib/article";
+import RootLayout from "../layouts/root-layout.astro";
+import { getTemplateComponent } from "../templates";
+
+/**
+ * The one place an Article becomes a page: the Document Renderer's markup, the Post
+ * Template that presents it, the page's own meta and JSON-LD, and the blocks' stylesheet.
+ *
+ * Production and Live Draft Preview both render through here, so the two cannot disagree
+ * about what an Article looks like — the surface supplies only what is its own, and
+ * anything it puts above the Article (the preview's control bar) arrives through the slot.
+ */
+interface Props {
+  article: Article;
+  /** The read model Blocks read other Articles through. */
+  articles: ArticleReadModel;
+  mode: DisplayMode;
+}
+
+const { article, articles, mode } = Astro.props;
+
+const plan = articleDisplayPlan(article, mode, articles);
+const { html, jsonLd, styles } = await renderDocument(article.content, plan.blockContext);
+const Template = getTemplateComponent(plan.template);
+---
+
+<RootLayout hasMain={false} title={plan.title} description={plan.description} jsonLd={jsonLd}>
+  <slot />
+  <Template {...plan.templateProps}>
+    <Fragment set:html={html} />
+  </Template>
+</RootLayout>
+
+<style is:inline set:html={styles} />

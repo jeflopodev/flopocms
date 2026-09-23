@@ -1,12 +1,10 @@
 ---
 export const prerender = false;
 
-import { createServices } from "../../../../lib/services";
-import RootLayout from "#/layouts/root-layout.astro";
-import { getTemplateComponent } from "../../../../templates";
-import { renderDocument } from "../../../../blocks/dsl";
-import { createArticleReadModel, toTemplateProps } from "../../../../lib/article";
+import ArticleDisplay from "../../../../components/article-display.astro";
+import { createArticleReadModel } from "../../../../lib/article";
 import { createD1ArticleSource } from "../../../../lib/article-sources/d1";
+import { createServices } from "../../../../lib/services";
 
 const { id } = Astro.params;
 
@@ -23,24 +21,10 @@ const article = await articles.loadVisible(id);
 if (!article) {
   return Astro.redirect("/admin/posts");
 }
-
-const Template = getTemplateComponent(article.template);
-
-// Render structured JSX blocks through the same engine production uses
-const previewResult = await renderDocument(article.content, {
-  articles,
-  post: article,
-  isDraftPreview: true,
-});
 ---
 
-<RootLayout
-  hasMain={false}
-  title={`[Preview] ${article.title}`}
-  description={article.description}
-  jsonLd={previewResult.jsonLd}
->
-  <!-- Preview Control Bar -->
+<ArticleDisplay article={article} articles={articles} mode="preview">
+  <!-- Preview Control Bar: the only thing this surface owns -->
   <div class="live-preview-bar">
     <div class="preview-bar-info">
       <span class="preview-badge">Live Draft Preview</span>
@@ -56,16 +40,7 @@ const previewResult = await renderDocument(article.content, {
       </a>
     </div>
   </div>
-
-  <div class="preview-content-wrapper">
-    <Template {...toTemplateProps(article)} draft={true}>
-      <Fragment set:html={previewResult.html} />
-    </Template>
-  </div>
-</RootLayout>
-
-<!-- Self-contained styles aggregated dynamically from registered blocks -->
-<style is:inline set:html={previewResult.styles} />
+</ArticleDisplay>
 
 <style>
   .live-preview-bar {
@@ -126,39 +101,11 @@ const previewResult = await renderDocument(article.content, {
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     text-decoration: none;
-    transition: background 0.15s ease;
+    transition: background-color 0.15s ease;
   }
 
   .btn-preview-back:hover {
     background: rgba(255, 255, 255, 0.22);
     color: #fff;
-  }
-
-  .preview-content-wrapper {
-    min-height: 100vh;
-  }
-
-  /* Breakout and Grid column positioning */
-  :global(.prose > *) {
-    grid-column: content-start / content-end;
-    min-width: 0;
-  }
-
-  :global(.prose > [data-stretch="wide"]) {
-    grid-column: wide-start / wide-end !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  :global(.prose > [data-stretch="full"]) {
-    grid-column: full-start / full-end !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  :global(.prose > [data-stretch="default"]) {
-    grid-column: content-start / content-end !important;
-    width: 100% !important;
-    max-width: 100% !important;
   }
 </style>

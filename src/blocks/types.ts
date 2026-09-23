@@ -23,17 +23,25 @@ export interface BlockNode<TProps = Record<string, any>> {
   children?: (BlockNode | InlineSpan)[];
 }
 
+/**
+ * The Article a block is rendered inside, as the Document Renderer carries it.
+ *
+ * Every field is required, which is the point: the two surfaces that render an Article used
+ * to hand the renderer differently-shaped objects, so a block could read a field that was
+ * populated on one surface and absent on the other. **Article Display** is the only producer.
+ */
+export interface BlockArticleContext {
+  id: string;
+  slug: string;
+  title: string;
+  author: string;
+  category: string;
+}
+
 export interface BlockRenderContext {
   /** Article reads for blocks that need other Articles (e.g. RelatedPosts). */
   articles?: ArticleReadModel;
-  post?: {
-    id?: string;
-    slug?: string;
-    title?: string;
-    category?: string;
-    tags?: string[] | string;
-    author?: string;
-  };
+  post?: BlockArticleContext;
   env?: any;
   isDraftPreview?: boolean;
 }

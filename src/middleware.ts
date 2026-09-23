@@ -1,5 +1,4 @@
 import { defineMiddleware } from "astro:middleware";
-import { validateSession } from "./lib/session";
 import { createServices } from "./lib/services";
 
 export const onRequest = defineMiddleware(async (context, next) => {
@@ -18,8 +17,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const token = context.cookies.get("admin_session")?.value;
     if (token) {
       try {
-        const { db } = createServices(context.locals);
-        const user = await validateSession(db, token);
+        const { accounts } = createServices(context.locals);
+        const user = await accounts.editorFor(token);
         if (user) {
           return context.redirect("/admin/posts");
         }
@@ -42,8 +41,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   try {
-    const { db } = createServices(context.locals);
-    const user = await validateSession(db, token);
+    const { accounts } = createServices(context.locals);
+    const user = await accounts.editorFor(token);
     if (!user) {
       context.cookies.delete("admin_session", { path: "/" });
       if (isAdminApi) {

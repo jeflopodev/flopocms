@@ -18,7 +18,7 @@ function metadata(): EditableArticleFields {
 }
 
 function sessionWith(
-  persist: (payload: any) => Promise<SaveOutcome>,
+  persist: (payload: any, options: any) => Promise<SaveOutcome>,
   overrides: Partial<ConstructorParameters<typeof EditorSession>[0]> = {}
 ) {
   return new EditorSession({
@@ -81,7 +81,7 @@ describe("Editor Session phases", () => {
 
     await session.saveRequested();
 
-    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ status: "published" }));
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ status: "published" }), expect.anything());
   });
 
   it("keeps unsaved changes and reports an error when the transport fails", async () => {
@@ -149,6 +149,43 @@ describe("Concurrency Lock conflicts", () => {
     const session = sessionWith(async () => ({ ok: false, status: 423 }));
     await session.saveRequested();
     expect(session.getSnapshot()).toMatchObject({ readOnly: true, lockedBy: undefined });
+  });
+});
+
+describe("Idempotent saves", () => {
+  it("sends one idempotency key and the loaded CAS base", async () => {
+    const persist = vi.fn(async (_payload: any, _options: any) => saved);
+    const session = sessionWith(persist, { initialExpectedSha: "sha-1", initialExpectedRef: "ref-1" });
+
+    await session.saveRequested();
+
+    expect(persist).toHaveBeenCalledTimes(1);
+    const [payload, options] = persist.mock.calls[0] as any[];
+    expect(payload).toMatchObject({ expected_sha: "sha-1", expected_ref: "ref-1" });
+    expect(options.idempotencyKey).toBeTruthy();
+  });
+
+  it("adopts the fresh sha the server reports for the next save", async () => {
+    const persist = vi.fn(async (_payload: any, _options: any) => ({ ...saved, sha: "sha-2", commitSha: "ref-2" }));
+    const session = sessionWith(persist, { initialExpectedSha: "sha-1" });
+
+    await session.saveRequested();
+    await session.saveRequested();
+
+    const calls = persist.mock.calls as any[][];
+    expect(calls[1][0]).toMatchObject({ expected_sha: "sha-2", expected_ref: "ref-2" });
+    expect(calls[0][1].idempotencyKey).not.toBe(calls[1][1].idempotencyKey);
+  });
+
+  it("surfaces a stale-base refusal without discarding work", async () => {
+    const session = sessionWith(async () => ({ ok: false, status: 409, error: 'Nothing was published: "x" moved on main. Reload and merge.' }));
+
+    session.markDirty();
+    await session.saveRequested("published");
+
+    expect(session.getSnapshot()).toMatchObject({ phase: "error" });
+    expect(session.getSnapshot().message).toContain("moved on main");
+    expect(session.hasUnsavedChanges).toBe(true);
   });
 });
 

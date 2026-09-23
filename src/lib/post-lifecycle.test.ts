@@ -4,8 +4,8 @@ import {
   deletePostLifecycle,
   duplicatePostLifecycle,
   savePostLifecycle,
-  serializePostMdx,
-  type PostMdxData,
+  serializePostBundle,
+  type PostBundleData,
 } from "./post-lifecycle";
 import { articleWriteModel, type ArticleWriteModel } from "./article-write-model";
 import { InMemoryGithubContents } from "./github-contents";
@@ -13,12 +13,14 @@ import { InMemoryLockStore } from "./locks";
 import { InMemoryPostStore, type PostRecord } from "./post-store";
 import { InMemoryMediaAdapter } from "./media-storage";
 import { createNoopArticleMirror, type ArticleMirror } from "./article-mirror";
+import type { AssetRegistry } from "./asset-registry";
+import type { EditorAccounts } from "./editor-accounts";
+import { InMemoryIdempotencyStore } from "./idempotency-store";
 import type { Services } from "./services";
 import type { DbClient } from "./db";
 
 const NOW = "2026-09-21T12:00:00.000Z";
 const BUNDLE = "src/content/blog/untitled-article/index.mdx";
-const LEGACY_BRANCH = "content/untitled-article";
 const LEGACY_FLAT_FILE = "src/content/blog/untitled-article.mdx";
 
 const actor = { id: "user-1", username: "jeflopo" };
@@ -54,6 +56,13 @@ interface TestDeps {
   mirror?: ArticleMirror;
 }
 
+/** A record store that refuses the projection write, as an unavailable D1 would. */
+class UnwritablePostStore extends InMemoryPostStore {
+  async save(_record: PostRecord): Promise<void> {
+    throw new Error("D1 unavailable");
+  }
+}
+
 /** Only the dependencies Post Lifecycle actually reaches are real here. */
 function testServices(deps: TestDeps = {}): Services {
   return {
@@ -64,6 +73,10 @@ function testServices(deps: TestDeps = {}): Services {
     mirror: deps.mirror ?? createNoopArticleMirror(),
     contents: deps.contents !== undefined ? deps.contents : new InMemoryGithubContents(),
     media: new InMemoryMediaAdapter(),
+    // None of these is reached from here; they are listed because the seam is typed as Services.
+    assets: undefined as unknown as AssetRegistry,
+    accounts: undefined as unknown as EditorAccounts,
+    idempotency: new InMemoryIdempotencyStore(() => new Date(NOW)),
     clock: { now: () => new Date(NOW) },
   };
 }
@@ -158,12 +171,44 @@ describe("saving a Draft", () => {
 
     expect(contents.has(BUNDLE)).toBe(false);
     expect(contents.commits[0]).toMatchObject({
-      action: "delete",
+      action: "commit",
       path: BUNDLE,
       message: 'feat(blog): unpublish "Untitled Article" (moved to draft)',
     });
-    expect(contents.deletedBranches).toEqual([LEGACY_BRANCH]);
     expect(res.message).toBe("Unpublished! Post moved back to draft in D1.");
+    expect(posts.all()[0].status).toBe("draft");
+  });
+
+  it("leaves a published Article published when main refuses the removal", async () => {
+    const posts = new InMemoryPostStore([storedRecord({ status: "published" })]);
+    const contents = new InMemoryGithubContents();
+    contents.seedFile(BUNDLE, "published bundle");
+    contents.failNextCommit("500 Internal Server Error");
+
+    const res = await savePostLifecycle({
+      payload: payload(),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    // Readers can still see it, so the record still says published.
+    expect(res).toMatchObject({ success: false, status: 502 });
+    expect(res.error).toContain("Nothing changed");
+    expect(posts.all()[0].status).toBe("published");
+    expect(contents.has(BUNDLE)).toBe(true);
+  });
+
+  it("refuses to unpublish when no GitHub PAT is configured", async () => {
+    const posts = new InMemoryPostStore([storedRecord({ status: "published" })]);
+
+    const res = await savePostLifecycle({
+      payload: payload(),
+      actor,
+      services: testServices({ posts, contents: null }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 503 });
+    expect(posts.all()[0].status).toBe("published");
   });
 });
 
@@ -180,24 +225,24 @@ describe("publishing an Article", () => {
 
     expect(contents.commits).toEqual([
       {
-        action: "put",
+        action: "commit",
         path: BUNDLE,
         message: 'feat(blog): publish "Untitled Article" by @jeflopo',
       },
     ]);
     expect(res).toMatchObject({
       committedToGitHub: true,
+      projectedToD1: true,
       statusState: "published",
       message: "Published to main on GitHub & saved to D1.",
     });
-    expect(contents.deletedBranches).toEqual([LEGACY_BRANCH]);
     expect(posts.all()[0].status).toBe("published");
   });
 
-  it("keeps the editorial record when the commit to main fails", async () => {
+  it("changes nothing when the commit to main fails", async () => {
     const posts = new InMemoryPostStore();
     const contents = new InMemoryGithubContents();
-    contents.failNextPut("403 Forbidden");
+    contents.failNextCommit("403 Forbidden");
 
     const res = await savePostLifecycle({
       payload: payload({ status: "published" }),
@@ -205,10 +250,11 @@ describe("publishing an Article", () => {
       services: testServices({ posts, contents }),
     });
 
-    expect(res.success).toBe(true);
-    expect(res.committedToGitHub).toBe(false);
-    expect(res.message).toContain("Saved to D1, but GitHub publish failed: 403 Forbidden");
-    expect(posts.all()[0]).toMatchObject({ status: "published" });
+    // No reader can see this Article, so no record may claim they can.
+    expect(res).toMatchObject({ success: false, status: 502 });
+    expect(res.error).toContain("Nothing was published");
+    expect(posts.all()).toEqual([]);
+    expect(contents.has(BUNDLE)).toBe(false);
   });
 
   it("refuses to publish when no GitHub PAT is configured", async () => {
@@ -220,11 +266,60 @@ describe("publishing an Article", () => {
       services: testServices({ posts, contents: null }),
     });
 
-    expect(res).toMatchObject({
-      committedToGitHub: false,
-      message: "Saved to D1 as published (GitHub PAT not configured).",
+    expect(res).toMatchObject({ success: false, status: 503 });
+    expect(res.error).toContain("no GitHub PAT");
+    expect(posts.all()).toEqual([]);
+  });
+
+  it("reports a stale record when main took the bundle but the projection failed", async () => {
+    const contents = new InMemoryGithubContents();
+
+    const res = await savePostLifecycle({
+      payload: payload({ status: "published" }),
+      actor,
+      services: testServices({ posts: new UnwritablePostStore(), contents }),
     });
-    expect(posts.all()[0].status).toBe("published");
+
+    // The Article is live and the record is behind it, which is the failure worth having.
+    expect(res).toMatchObject({
+      success: true,
+      committedToGitHub: true,
+      projectedToD1: false,
+    });
+    expect(res.message).toContain("stale");
+    expect(contents.has(BUNDLE)).toBe(true);
+  });
+
+  it("refuses a publish based on a stale bundle sha", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+    contents.seedFile(BUNDLE, "current bundle");
+
+    const res = await savePostLifecycle({
+      payload: payload({ status: "published", expected_sha: "sha-stale" }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 409 });
+    expect(res.error).toContain("moved on main");
+    expect(posts.all()).toEqual([]);
+  });
+
+  it("refuses a publish based on a stale ref", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+    const staleRef = contents.currentRef();
+    await contents.putFile("other.txt", "other", { message: "other" });
+
+    const res = await savePostLifecycle({
+      payload: payload({ status: "published", expected_ref: staleRef }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 409 });
+    expect(posts.all()).toEqual([]);
   });
 });
 
@@ -386,17 +481,43 @@ describe("deleting an Article", () => {
     expect(posts.all()).toEqual([]);
   });
 
-  it("still deletes locally when main refuses the deletion", async () => {
+  it("changes nothing when main refuses the deletion", async () => {
     const posts = new InMemoryPostStore([storedRecord()]);
     const contents = new InMemoryGithubContents();
     contents.seedFile(BUNDLE, "bundle");
-    contents.failNextDelete("500 Internal Server Error");
+    contents.failNextCommit("500 Internal Server Error");
 
     const res = await deletePostLifecycle({ id: "post-1", services: testServices({ posts, contents }) });
 
+    // Readers can still see it, so the record that says so stays.
+    expect(res).toMatchObject({ success: false, status: 502 });
+    expect(res.error).toContain("Nothing was deleted");
+    expect(posts.all()).toHaveLength(1);
+    expect(contents.has(BUNDLE)).toBe(true);
+  });
+
+  it("refuses to delete a published Article with no GitHub PAT", async () => {
+    const posts = new InMemoryPostStore([storedRecord()]);
+
+    const res = await deletePostLifecycle({
+      id: "post-1",
+      services: testServices({ posts, contents: null }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 503 });
+    expect(posts.all()).toHaveLength(1);
+  });
+
+  it("deletes a Draft with no GitHub PAT, because main has no bundle of it", async () => {
+    const posts = new InMemoryPostStore([storedRecord({ status: "draft" })]);
+
+    const res = await deletePostLifecycle({
+      id: "post-1",
+      services: testServices({ posts, contents: null }),
+    });
+
     expect(res).toMatchObject({ success: true, deletedFromGitHub: false });
     expect(posts.all()).toEqual([]);
-    expect(contents.has(BUNDLE)).toBe(true);
   });
 
   it("rejects a missing id", async () => {
@@ -406,14 +527,14 @@ describe("deleting an Article", () => {
 });
 
 /**
- * `serializePostMdx` is the piece of Post Lifecycle that needs no dependencies at all.
+ * `serializePostBundle` is the piece of Post Lifecycle that needs no dependencies at all.
  */
-describe("serializePostMdx", () => {
+describe("serializePostBundle", () => {
   const PUB_DATE = "2026-09-21T12:00:00.000Z";
   const frontmatter = (markdown: string) => markdown.split("---")[1];
   /** The serializer has no clock of its own: every case names the moment it is writing for. */
-  const serialize = (data: Partial<PostMdxData>) =>
-    serializePostMdx({ title: "Hello", pubDate: PUB_DATE, ...data });
+  const serialize = (data: Partial<PostBundleData>) =>
+    serializePostBundle({ title: "Hello", pubDate: PUB_DATE, ...data });
 
   it("writes the published status into frontmatter", () => {
     const mdx = serialize({ draft: false });

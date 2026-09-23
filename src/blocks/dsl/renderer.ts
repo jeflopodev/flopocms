@@ -171,14 +171,14 @@ export async function renderDocument(
   const blockEntities = collectJsonLdEntities(blocks, serverDataMap);
 
   // Base BlogPosting entity
-  const post = ctx.post || {};
+  const post = ctx.post;
   const blogPosting: any = {
     "@type": "BlogPosting",
-    "@id": post.slug ? `#article-${post.slug}` : "#article",
-    headline: post.title || "",
+    "@id": post?.slug ? `#article-${post.slug}` : "#article",
+    headline: post?.title || "",
     author: {
       "@type": "Person",
-      name: post.author || "jeflopo",
+      name: post?.author || "jeflopo",
     },
   };
 

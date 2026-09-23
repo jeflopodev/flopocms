@@ -6,6 +6,7 @@ import { EditorDomAdapter } from "./dom-adapter";
 import { LockManager } from "./lock-manager";
 import { AssetPickerModal } from "./asset-modal";
 import { actionChange, actionFor } from "./actions";
+import type { AssetSummary } from "../../lib/asset-library";
 
 /**
  * What the Editor needs handed to it to start, and nothing more.
@@ -22,8 +23,11 @@ export interface EditorInitData {
     content_mdx?: string;
     isInitiallyLocked?: boolean;
     lockUser?: string;
+    expected_sha?: string | null;
+    expected_ref?: string;
   };
-  assets: any[];
+  /** What the Asset Picker chooses from, in the shape its view model reads. */
+  assets: AssetSummary[];
 }
 
 const themeConfig = EditorView.theme({
@@ -73,26 +77,50 @@ export function initEditor(data: EditorInitData): void {
     initialSlug: post.slug,
     initialStatus: post.status || "draft",
     initialReadOnly: Boolean(post.isInitiallyLocked),
-    initialLockedBy: post.lockUser,
+    initialLockedBy: post.lockUser || undefined,
+    initialExpectedSha: post.expected_sha,
+    initialExpectedRef: post.expected_ref,
     readContent: () => editorView.state.doc.toString(),
     readMetadata: () => dom.readMetadata(),
-    persist: async (payload) => {
-      const res = await fetch("/api/admin/posts/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = (await res.json()) as any;
+    persist: async (payload, { idempotencyKey }) => {
+      const RETRYABLE = new Set([502, 503, 504]);
+      const delays = [300, 800];
+      let attempt = 0;
 
-      return {
-        ok: Boolean(body.success),
-        status: res.status,
-        lockedBy: body.lockedBy,
-        slug: body.slug,
-        statusState: body.statusState,
-        message: body.message,
-        error: body.error,
-      };
+      for (;;) {
+        let res: Response;
+        try {
+          res = await fetch("/api/admin/posts/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+            body: JSON.stringify(payload),
+          });
+        } catch (err) {
+          if (attempt >= delays.length) throw err;
+          await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+          attempt += 1;
+          continue;
+        }
+
+        const body = (await res.json()) as any;
+        if (!RETRYABLE.has(res.status) || attempt >= delays.length) {
+          return {
+            ok: Boolean(body.success),
+            status: res.status,
+            lockedBy: body.lockedBy,
+            slug: body.slug,
+            statusState: body.statusState,
+            message: body.message,
+            error: body.error,
+            sha: body.sha,
+            commitSha: body.commitSha,
+          };
+        }
+
+        // Same key on retry: the server replays instead of committing twice.
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        attempt += 1;
+      }
     },
   });
 

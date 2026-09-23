@@ -2,16 +2,15 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { createServices } from "../../../lib/services";
-import { deleteSession } from "../../../lib/session";
 
 export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
   const token = cookies.get("admin_session")?.value;
   if (token) {
     try {
-      const { db } = createServices(locals);
-      await deleteSession(db, token);
+      const { accounts } = createServices(locals);
+      await accounts.signOut(token);
     } catch (err) {
-      console.error("Logout deleteSession error:", err);
+      console.error("Logout sign-out error:", err);
     }
   }
 

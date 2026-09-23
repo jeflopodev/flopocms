@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import type { TemplateId } from "./article";
 import type { DbClient } from "./db";
 import { posts as postsTable } from "./db";
@@ -31,25 +31,33 @@ export interface PostRecord {
   updatedAt: string;
 }
 
+/** How many Articles an Editor has, by status. The Profile & Security page's figures. */
+export interface AuthorCounts {
+  total: number;
+  published: number;
+  drafts: number;
+}
+
 /**
  * D1's editorial record seam.
  *
- * Post Lifecycle needs four things from the editorial store, not a query builder, which
+ * Post Lifecycle needs five things from the editorial store, not a query builder, which
  * is what lets its draft/publish/unpublish transitions run against a substitute.
  */
 export interface PostStore {
   find(id: string): Promise<PostRecord | null>;
+  /** The record for a slug, which is how a projection from main finds what it repairs. */
+  findBySlug(slug: string): Promise<PostRecord | null>;
   /** The editorial listing for the Admin Dashboard, most recently edited first. */
   list(): Promise<PostRecord[]>;
   /** Is this slug already used by a different Article? */
   slugTaken(slug: string, exceptId: string): Promise<boolean>;
-  /** Writes the record, clearing the branch-and-PR bookkeeping ADR-0009 left behind. */
+  /** Writes the whole record: the editorial record is a projection of what main holds. */
   save(record: PostRecord): Promise<void>;
   remove(id: string): Promise<void>;
+  /** What one Editor has written, so a profile needs no query of its own. */
+  countsByAuthor(author: string): Promise<AuthorCounts>;
 }
-
-/** Columns from the ADR-0008 branch-and-PR era. Nothing sets them any more. */
-const LEGACY_GIT_COLUMNS = { gitBranch: null, prNumber: null, prUrl: null };
 
 export function createD1PostStore(db: DbClient): PostStore {
   const columnsFor = (record: PostRecord) => ({
@@ -67,12 +75,20 @@ export function createD1PostStore(db: DbClient): PostStore {
     wideWidth: record.wideWidth,
     pubDate: record.pubDate,
     updatedAt: record.updatedAt,
-    ...LEGACY_GIT_COLUMNS,
   });
 
   return {
     async find(id) {
       const [row] = await db.select().from(postsTable).where(eq(postsTable.id, id)).limit(1);
+      return row ?? null;
+    },
+
+    async findBySlug(slug) {
+      const [row] = await db
+        .select()
+        .from(postsTable)
+        .where(eq(postsTable.slug, slug))
+        .limit(1);
       return row ?? null;
     },
 
@@ -108,6 +124,24 @@ export function createD1PostStore(db: DbClient): PostStore {
     async remove(id) {
       await db.delete(postsTable).where(eq(postsTable.id, id));
     },
+
+    async countsByAuthor(author) {
+      const [row] = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+          published: sql<number>`SUM(CASE WHEN ${postsTable.status} = 'published' THEN 1 ELSE 0 END)`,
+          drafts: sql<number>`SUM(CASE WHEN ${postsTable.status} = 'draft' THEN 1 ELSE 0 END)`,
+        })
+        .from(postsTable)
+        .where(eq(postsTable.author, author));
+
+      // SUM answers null rather than 0 for an Editor who has written nothing yet.
+      return {
+        total: row?.total ?? 0,
+        published: row?.published ?? 0,
+        drafts: row?.drafts ?? 0,
+      };
+    },
   };
 }
 
@@ -121,6 +155,12 @@ export class InMemoryPostStore implements PostStore {
 
   async find(id: string): Promise<PostRecord | null> {
     return this.records.get(id) ?? null;
+  }
+
+  async findBySlug(slug: string): Promise<PostRecord | null> {
+    return (
+      [...this.records.values()].find((record) => record.slug === slug) ?? null
+    );
   }
 
   async list(): Promise<PostRecord[]> {
@@ -137,6 +177,16 @@ export class InMemoryPostStore implements PostStore {
 
   async remove(id: string): Promise<void> {
     this.records.delete(id);
+  }
+
+  async countsByAuthor(author: string): Promise<AuthorCounts> {
+    const written = [...this.records.values()].filter((record) => record.author === author);
+
+    return {
+      total: written.length,
+      published: written.filter((record) => record.status === "published").length,
+      drafts: written.filter((record) => record.status === "draft").length,
+    };
   }
 
   /** Test helper: everything currently stored. */

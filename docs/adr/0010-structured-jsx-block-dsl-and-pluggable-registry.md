@@ -43,3 +43,11 @@ Previously, post content relied on Markdown/MDX syntax parsed with regular expre
 Decision 1's purge is complete in the tree. The `.astro` block components that the auto-import kept resolving, the auto-import itself, and the Sätteri processor with its schema-extractor plugin are deleted; article HTML is byte-identical before and after, which is how the residue was identified. A block is described in exactly one place, its `BlockDefinition` under `src/blocks/<name>/`, and no configuration lists blocks a second time.
 
 One addition to decision 2's Mark Refs: a `link` carries an optional `download` alongside `href`, `target` and `rel`. Without it a non-image **Asset Insertion** could not keep the uploaded file's name, and the parser's link branch discarded the attribute silently. Raw `<a>` remains an accepted alias for `<Link>`.
+
+## Amendment (2026-09-22)
+
+Decision 5's parity is currently a convention rather than a property: `/blog/[...slug].astro` and `/admin/posts/[id]/preview.astro` each assemble the same pipeline by hand — choose the read model, load, render, pick the template, map the props, wrap it, emit the block styles — and they have already drifted. They hand the Document Renderer different `post` contexts for the same Article, and the Breakout Component's grid rule is written again in the preview's own stylesheet on top of `global.css`.
+
+**Article Display** becomes the one place an Article is rendered. One module owns the template choice, the Article-to-template-props mapping, the block context the Document Renderer receives, the page's title, description and JSON-LD, and the Breakout Component's rule. Each surface then supplies only what is genuinely its own: production the Article Read Model over the Git bundle, Live Draft Preview the bar over a D1 read of the same Article. Parity becomes observable — one Article rendered in both modes, compared — instead of asserted in a comment.
+
+Article Display is now two files: `src/lib/article-display.ts` decides what an Article becomes in each mode, and `src/components/article-display.astro` renders it. The plan is separate from the markup for one reason — nothing in this project type-checks or renders a `.astro` file in a test, so parity had to be assertable, and it is: one Article rendered through both plans produces byte-identical markup, styles and JSON-LD.
