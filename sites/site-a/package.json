@@ -1,0 +1,33 @@
+{
+  "name": "site-a",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node scripts/check-image-sizes.mjs && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check:images": "node scripts/check-image-sizes.mjs",
+    "review:project": "cms-project-view",
+    "create-user": "cms-create-user",
+    "d1:migrate": "wrangler d1 migrations apply DB",
+    "typecheck": "astro sync && tsc --noEmit",
+    "deploy": "astro build && wrangler deploy"
+  },
+  "dependencies": {
+    "cms": "workspace:*",
+    "blocks": "workspace:*",
+    "@astrojs/check": "^0.9.10",
+    "@astrojs/cloudflare": "^14.3.1",
+    "@astrojs/mdx": "^8.0.1",
+    "astro": "^7.3.2",
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260916.1",
+    "@types/node": "^22.20.3",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.132.0"
+  }
+}

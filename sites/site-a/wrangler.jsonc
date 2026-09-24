@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "blog",
+  "compatibility_date": "2026-09-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./dist"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "blog-astro",
+      "database_id": "9581dcca-affa-4a29-b448-a992869c1e1d",
+      "migrations_dir": "../../packages/cms/migrations"
+    }
+  ]
+}

@@ -1,0 +1,738 @@
+---
+export const prerender = false;
+
+import AdminLayout from "cms/layouts/AdminLayout.astro";
+import { createServices } from "cms/lib/services";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/admin/login");
+}
+
+const services = createServices(Astro.locals);
+
+// Identity comes from Editor Accounts and the Article counts from the Post Store: this
+// page owns neither, so neither rule is written twice.
+const profile = await services.accounts.profile(user.id, {
+  currentToken: Astro.cookies.get("admin_session")?.value,
+});
+const postStats = await services.posts.countsByAuthor(user.username);
+
+const stamp = (iso: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+
+const openSessions = (profile?.sessions ?? []).map((open) => ({
+  ...open,
+  startedLabel: stamp(open.createdAt),
+  endsLabel: stamp(open.expiresAt),
+}));
+
+const rawDate = profile?.createdAt;
+const createdAtFormatted = rawDate
+  ? new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(rawDate))
+  : "Active";
+---
+
+<AdminLayout title="Profile & Security" activeTab="settings">
+  <div class="profile-page">
+    <!-- Header -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Profile & Security</h1>
+        <p class="page-subtitle">Manage your co-editor account, security credentials, and editorial activity</p>
+      </div>
+    </div>
+
+    <div class="profile-grid">
+      <!-- Left Column: User Card & Stats -->
+      <div class="profile-left">
+        <!-- Account Card -->
+        <div class="card account-card">
+          <div class="avatar-large">
+            {user.username.slice(0, 2).toUpperCase()}
+          </div>
+          <h2 class="user-display-name">@{user.username}</h2>
+          <span class="user-role-badge">Co-Editor</span>
+          <p class="account-joined">Member since {createdAtFormatted}</p>
+
+          <div class="account-divider"></div>
+
+          <div class="stats-list">
+            <div class="stat-item">
+              <span class="stat-label">Total Articles</span>
+              <span class="stat-value">{postStats.total || 0}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Published</span>
+              <span class="stat-value text-success">{postStats.published || 0}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Drafts</span>
+              <span class="stat-value text-warning">{postStats.drafts || 0}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Active Sessions</span>
+              <span class="stat-value">{openSessions.length || 1}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Password Change Form -->
+      <div class="profile-right">
+        <div class="card security-card">
+          <div class="card-header">
+            <div class="header-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Change Password</h2>
+              <p class="card-subtitle">
+                Update your login password. Passwords are encrypted using Web Crypto PBKDF2 with 100,000 iterations.
+              </p>
+            </div>
+          </div>
+
+          <!-- Alert Container -->
+          <div id="feedback-alert" class="alert-box" style="display: none;"></div>
+
+          <form id="change-password-form" class="password-form">
+            <div class="form-group">
+              <label for="current-password">Current Password</label>
+              <div class="password-field-wrapper">
+                <input
+                  type="password"
+                  id="current-password"
+                  class="form-control"
+                  required
+                  placeholder="Enter your current password"
+                />
+                <button type="button" class="toggle-password-btn" data-target="current-password" title="Toggle visibility">
+                  <svg class="eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="new-password">New Password</label>
+              <div class="password-field-wrapper">
+                <input
+                  type="password"
+                  id="new-password"
+                  class="form-control"
+                  required
+                  minlength="8"
+                  placeholder="Enter new password (min. 8 characters)"
+                />
+                <button type="button" class="toggle-password-btn" data-target="new-password" title="Toggle visibility">
+                  <svg class="eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+              <span class="field-hint">Must be at least 8 characters long.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="confirm-password">Confirm New Password</label>
+              <div class="password-field-wrapper">
+                <input
+                  type="password"
+                  id="confirm-password"
+                  class="form-control"
+                  required
+                  minlength="8"
+                  placeholder="Re-type new password"
+                />
+                <button type="button" class="toggle-password-btn" data-target="confirm-password" title="Toggle visibility">
+                  <svg class="eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="save-password-btn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>Update Password</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open Sessions -->
+    <div class="card sessions-card">
+      <div class="card-header">
+        <div class="header-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="18" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Open Sessions</h2>
+          <p class="card-subtitle">
+            Every device signed in as @{user.username}. A session lasts 30 days unless it is ended here.
+          </p>
+        </div>
+      </div>
+
+      <div id="sessions-feedback" class="alert-box" style="display: none;"></div>
+
+      {openSessions.length === 0 ? (
+        <p class="card-subtitle">No open sessions.</p>
+      ) : (
+        <ul class="sessions-list">
+          {openSessions.map((open) => (
+            <li class="session-row">
+              <div class="session-where">
+                <span class="session-label">
+                  {open.current ? "This device" : "Another device"}
+                </span>
+                <span class="session-dates">
+                  Started {open.startedLabel} · ends {open.endsLabel}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary session-end-btn"
+                data-session-id={open.id}
+              >
+                {open.current ? "Sign out here" : "End session"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div class="form-actions">
+        <button type="button" id="sign-out-everywhere" class="btn btn-danger">
+          Sign out everywhere
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Password visibility toggle
+    document.querySelectorAll(".toggle-password-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = (btn as HTMLElement).dataset.target;
+        if (!targetId) return;
+        const input = document.getElementById(targetId) as HTMLInputElement;
+        if (!input) return;
+
+        if (input.type === "password") {
+          input.type = "text";
+          btn.classList.add("visible");
+        } else {
+          input.type = "password";
+          btn.classList.remove("visible");
+        }
+      });
+    });
+
+    // Form submission handler
+    const form = document.getElementById("change-password-form") as HTMLFormElement;
+    const submitBtn = document.getElementById("save-password-btn") as HTMLButtonElement;
+    const alertBox = document.getElementById("feedback-alert") as HTMLDivElement;
+    const currentPassInput = document.getElementById("current-password") as HTMLInputElement;
+    const newPassInput = document.getElementById("new-password") as HTMLInputElement;
+    const confirmPassInput = document.getElementById("confirm-password") as HTMLInputElement;
+
+    function showAlert(message: string, type: "success" | "error") {
+      alertBox.className = `alert-box alert-${type}`;
+      alertBox.textContent = message;
+      alertBox.style.display = "block";
+    }
+
+    function hideAlert() {
+      alertBox.style.display = "none";
+    }
+
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideAlert();
+
+      const currentPassword = currentPassInput.value;
+      const newPassword = newPassInput.value;
+      const confirmPassword = confirmPassInput.value;
+
+      if (newPassword !== confirmPassword) {
+        showAlert("New password and confirmation do not match.", "error");
+        return;
+      }
+
+      if (newPassword.length < 8) {
+        showAlert("New password must be at least 8 characters long.", "error");
+        return;
+      }
+
+      submitBtn.setAttribute("disabled", "true");
+      submitBtn.innerHTML = `<span>Updating password...</span>`;
+
+      try {
+        const res = await fetch("/api/admin/profile/change-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentPassword,
+            newPassword,
+            confirmPassword,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showAlert(data.message || "Password successfully updated!", "success");
+          form.reset();
+        } else {
+          showAlert(data.error || "Failed to update password.", "error");
+        }
+      } catch {
+        showAlert("Error connecting to server. Please try again.", "error");
+      } finally {
+        submitBtn.removeAttribute("disabled");
+        submitBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span>Update Password</span>
+        `;
+      }
+    });
+
+    // Ending a session re-renders the list, which only the server can produce.
+    const sessionsFeedback = document.getElementById("sessions-feedback") as HTMLDivElement | null;
+    const signOutEverywhereBtn = document.getElementById("sign-out-everywhere") as HTMLButtonElement | null;
+
+    function showSessionsAlert(message: string, type: "success" | "error") {
+      if (!sessionsFeedback) return;
+      sessionsFeedback.className = `alert-box alert-${type}`;
+      sessionsFeedback.textContent = message;
+      sessionsFeedback.style.display = "block";
+    }
+
+    async function endSession(url: string, body: Record<string, unknown> = {}) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          showSessionsAlert(data.error || "Could not end that session.", "error");
+          return;
+        }
+
+        // The cookie is gone with the session, so the sign-in page is the only place to be.
+        if (data.signedOut) {
+          window.location.href = "/admin/login";
+          return;
+        }
+
+        window.location.reload();
+      } catch {
+        showSessionsAlert("Error connecting to server. Please try again.", "error");
+      }
+    }
+
+    document.querySelectorAll(".session-end-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sessionId = (btn as HTMLElement).dataset.sessionId;
+        if (sessionId) endSession("/api/admin/profile/sessions/end", { sessionId });
+      });
+    });
+
+    signOutEverywhereBtn?.addEventListener("click", () => {
+      signOutEverywhereBtn.setAttribute("disabled", "true");
+      endSession("/api/admin/profile/sessions/end-all");
+    });
+  </script>
+</AdminLayout>
+
+<style>
+  .profile-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.25rem 0;
+    color: var(--text-primary);
+  }
+
+  .page-subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .profile-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: 1.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Account Card */
+  .account-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .avatar-large {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--primary-surface);
+    color: var(--primary);
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    border: 2px solid var(--primary-light);
+  }
+
+  .user-display-name {
+    margin: 0 0 0.4rem 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .user-role-badge {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    background: var(--primary-surface);
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+  }
+
+  .account-joined {
+    margin: 0;
+    font-size: 0.825rem;
+    color: var(--text-muted);
+  }
+
+  .account-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 1.5rem 0;
+  }
+
+  .stats-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
+  }
+
+  .stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .text-success {
+    color: #16a34a;
+  }
+
+  .text-warning {
+    color: #d97706;
+  }
+
+  /* Security Card */
+  .security-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 1.25rem;
+  }
+
+  .header-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: var(--primary-surface);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .card-subtitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  /* Alerts */
+  .alert-box {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .alert-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .alert-success {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+
+  /* Form */
+  .password-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .form-group label {
+    font-size: 0.825rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .password-field-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 0.6rem 2.5rem 0.6rem 0.85rem;
+    font-size: 0.9rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-surface);
+  }
+
+  .toggle-password-btn {
+    position: absolute;
+    right: 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+  }
+
+  .toggle-password-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .form-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+    border: 1px solid var(--primary);
+  }
+
+  .btn-primary:hover {
+    background: var(--primary-hover);
+  }
+
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--bg-body);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .btn-secondary:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+  }
+
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  /* Open Sessions */
+  .sessions-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .sessions-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .session-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .session-row:first-child {
+    border-top: none;
+  }
+
+  .session-where {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .session-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .session-dates {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+</style>

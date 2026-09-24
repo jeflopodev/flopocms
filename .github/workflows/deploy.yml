@@ -1,9 +1,12 @@
-name: Deploy to Cloudflare Workers
+name: Deploy site-a to Cloudflare Workers
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "sites/site-a/**"
+      - "packages/cms/**"
   workflow_dispatch:
 
 # Ensure only one deployment runs at a time to prevent race conditions
@@ -40,12 +43,14 @@ jobs:
         run: pnpm run test
 
       - name: Build project
+        working-directory: sites/site-a
         env:
           ENVIRONMENT: production
           NODE_ENV: production
         run: pnpm run build
 
       - name: Apply D1 database migrations
+        working-directory: sites/site-a
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -55,12 +60,14 @@ jobs:
       # ADR-0012 slow path: the deploy performs the projection from its checkout
       # and blocks on failure, so the view matches what is about to be served.
       - name: Project the Published View
+        working-directory: sites/site-a
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm run review:project
 
       - name: Deploy to Cloudflare Workers
+        working-directory: sites/site-a
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

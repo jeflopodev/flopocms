@@ -1,0 +1,365 @@
+---
+import { Image } from "astro:assets";
+import RootLayout from "#/layouts/root-layout.astro";
+import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { createEnvironmentReadModel, isBundledHeroImage } from "cms/lib/article";
+import { createGitBundleSource } from "cms/lib/article-sources/git-bundle";
+
+// The same read model the Article pages read through, so a listing can never show a Draft
+// that production hides, and the Draft visibility rule has one owner.
+const posts = (await createEnvironmentReadModel(createGitBundleSource()).listVisible()).slice(0, 3);
+---
+
+<RootLayout title="Home">
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-badge">
+      <span class="status-dot"></span>
+      <span>Modern Web Engineering & Architecture</span>
+    </div>
+
+    <h1 class="hero-title">
+      Crafting performant web experiences & <span class="accent-text">sharing lessons</span> along the way.
+    </h1>
+
+    <p class="hero-subtitle">
+      Welcome to my personal digital garden. Here you will find deep-dives into modern frontend engineering, Astro, TypeScript, performance optimizations, and thoughtful design systems.
+    </p>
+
+    <div class="hero-actions">
+      <a href="/blog" class="btn btn-primary">
+        Explore Articles
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+      <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+        </svg>
+        GitHub Profile
+      </a>
+    </div>
+  </section>
+
+  <!-- Topics / Key Pillars -->
+  <section class="pillars-section">
+    <div class="pillar-card">
+      <div class="pillar-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+      <h3>High Performance</h3>
+      <p>Zero-JS static HTML by default with selective hydration for maximum Core Web Vitals scores.</p>
+    </div>
+
+    <div class="pillar-card">
+      <div class="pillar-icon" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </div>
+      <h3>Modern Standards</h3>
+      <p>Clean semantic markup, fluid typography, native CSS custom properties, and accessible UX.</p>
+    </div>
+
+    <div class="pillar-card">
+      <div class="pillar-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>
+      </div>
+      <h3>Content-Driven</h3>
+      <p>Type-safe collections, MDX interactive elements, and formatted prose for effortless reading.</p>
+    </div>
+  </section>
+
+  <!-- Latest Articles Section -->
+  <section class="recent-section">
+    <div class="section-header">
+      <div>
+        <span class="badge">Fresh off the press</span>
+        <h2 class="section-title">Latest Publications</h2>
+      </div>
+      <a href="/blog" class="view-all-link">
+        View all articles
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+    </div>
+
+    <div class="recent-grid">
+      {posts.map((post) => (
+        <article class="recent-card">
+          <a href={`/blog/${post.slug}/`} class="recent-card-inner">
+            {post.heroImage && (
+              <div class="recent-img-box">
+                {isBundledHeroImage(post.heroImage) ? (
+                  <Image
+                    width={540}
+                    height={280}
+                    src={post.heroImage}
+                    alt={post.title}
+                    class="recent-img"
+                  />
+                ) : (
+                  <img src={post.heroImage} alt={post.title} class="recent-img" />
+                )}
+              </div>
+            )}
+            <div class="recent-content">
+              <time datetime={post.pubDate} class="recent-date">
+                {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(post.pubDate))}
+              </time>
+              <h3 class="recent-title">{post.title}</h3>
+              <p class="recent-desc">{post.description}</p>
+              <span class="recent-more">Read article &rarr;</span>
+            </div>
+          </a>
+        </article>
+      ))}
+    </div>
+  </section>
+</RootLayout>
+
+<style>
+  /* Hero */
+  .hero-section {
+    padding: 3rem 0 4.5rem;
+    text-align: left;
+    max-width: 840px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-light);
+    margin-bottom: 1.5rem;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan);
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 5vw, 3.75rem);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.035em;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+  }
+
+  .accent-text {
+    color: var(--primary);
+  }
+
+  .hero-subtitle {
+    font-size: 1.25rem;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    margin-bottom: 2.25rem;
+    max-width: 680px;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* Pillars */
+  .pillars-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 5rem;
+    padding-top: 1rem;
+  }
+
+  .pillar-card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 1.75rem;
+    transition: transform var(--transition-base), border-color var(--transition-base);
+  }
+
+  .pillar-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-strong);
+  }
+
+  .pillar-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.25rem;
+  }
+
+  .pillar-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .pillar-card p {
+    font-size: 0.925rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* Recent Articles */
+  .recent-section {
+    padding-top: 1rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 2.25rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--text-primary);
+    margin-top: 0.5rem;
+  }
+
+  .view-all-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary-light);
+    transition: gap var(--transition-fast);
+  }
+
+  .view-all-link:hover {
+    gap: 0.75rem;
+  }
+
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.75rem;
+  }
+
+  .recent-card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  }
+
+  .recent-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .recent-card-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    text-decoration: none;
+  }
+
+  .recent-img-box {
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    background-color: var(--bg-surface-elevated);
+  }
+
+  .recent-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.4s ease;
+  }
+
+  .recent-card:hover .recent-img {
+    transform: scale(1.04);
+  }
+
+  .recent-content {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .recent-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .recent-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    transition: color var(--transition-fast);
+  }
+
+  .recent-card:hover .recent-title {
+    color: var(--primary-light);
+  }
+
+  .recent-desc {
+    color: var(--text-secondary);
+    font-size: 0.925rem;
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .recent-more {
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--primary-light);
+    margin-top: auto;
+  }
+</style>

@@ -266,55 +266,53 @@ src/scripts/editor/
 ```
 .
 ├── CONTEXT.md                    # Canonical domain glossary and definitions
-├── astro.config.mjs              # Astro configuration (Cloudflare adapter + MDX loader)
-├── wrangler.jsonc                # Cloudflare Workers & D1 database bindings
-├── drizzle.config.ts             # Drizzle ORM schema configuration
-├── migrations/                   # D1 database SQL migrations
 ├── docs/
-│   ├── adr/                      # Architectural Decision Records (0001 - 0011)
+│   ├── adr/                      # Architectural Decision Records (0001 - 0014)
 │   ├── agents/                   # Agent operational guides (domain, triage, issues)
 │   └── architecture.md           # This document
-└── src/
-    ├── blocks/                   # Pluggable Block Registry & JSX Block DSL
-    │   ├── dsl/                  # Parser, serializer, inspector, and renderer
-    │   ├── registry.ts           # Central Block Registry
-    │   └── [block-name]/         # Individual self-contained blocks
-    ├── db/
-    │   └── schema.ts             # Drizzle D1 database schema (users, posts, assets, locks)
-    ├── layouts/                  # Astro page layouts (RootLayout)
-    ├── lib/                      # Core domain modules, seams, and adapters
-    │   ├── admin-route.ts        # Admin API route wrapper with error handling
-    │   ├── article.ts            # Article Read Model
-    │   ├── article-sources/      # Read model adapters (Git bundle & D1)
-    │   ├── article-write-model.ts# Payload parser & validator
-    │   ├── asset-registry.ts     # Asset Registry seam & D1/MediaStorage coordination
-    │   ├── asset-rules.ts        # Dependency-free asset validation rules
-    │   ├── auth.ts               # PBKDF2 password hashing & verification
-    │   ├── editor-accounts.ts    # Editor credentials & sessions (D1 / InMemory)
-    │   ├── github-contents.ts    # GitHub REST API adapter
-    │   ├── locks.ts              # Pessimistic concurrency locks
-    │   ├── media-storage.ts      # Byte persistence adapter (GitHub/disk)
-    │   ├── post-lifecycle.ts     # Deep module managing all post state transitions
-    │   ├── post-store.ts         # PostStore persistence seam (D1 / InMemory)
-    │   ├── article-display.ts    # What an Article becomes per mode (published / preview)
-    │   ├── article-projection.ts # Article (main) → editorial record
-    │   └── services.ts           # Services seam resolving adapters at the edge
-    ├── components/
-    │   └── article-display.astro # The one place an Article becomes a page
-    ├── pages/
-    │   ├── admin/                # Edge-rendered editorial dashboard routes
-    │   │   ├── posts/[id].astro  # Full-screen CodeMirror article editor
-    │   │   ├── posts/[id]/preview.astro # Live Draft Preview
-    │   │   ├── assets/index.astro# Asset library manager
-    │   │   ├── profile.astro     # User profile and security
-    │   │   └── login.astro       # Editorial authentication
-    │   ├── api/admin/            # JSON API endpoints for editorial actions
-    │   ├── blog/                 # Statically rendered public blog routes
-    │   │   └── [...slug].astro   # Article page with SSG getStaticPaths
-    │   └── index.astro           # Homepage
-    ├── scripts/editor/           # Browser-side CodeMirror and UI controllers
-    └── templates/                # Post presentation templates (default, two-column)
+├── packages/
+│   ├── blocks/                   # Self-contained blocks: zero imports outside itself
+│   │   ├── src/[block]/          # One directory per block (schema, render, styles,
+│   │   │                         # JSON-LD, server data, drawer card, toolbar buttons)
+│   │   ├── src/dsl/              # Parser, serializer, inspector, and renderer
+│   │   ├── src/registry.ts       # The only hardcoded block list (removal contract)
+│   │   ├── src/toolbar.ts        # Marks plus registered entries, ordered
+│   │   └── src/asset-rules.ts    # Dependency-free upload validation
+│   └── cms/                      # Versioned CMS: everything sites share, zero real content
+│       ├── src/lib/              # Core domain modules, seams, and adapters
+│       │   ├── article-display.ts# What an Article becomes per mode (published / preview)
+│       │   ├── article-projection.ts # Article (main) → editorial record
+│       │   ├── post-lifecycle.ts # Deep module managing all post state transitions
+│       │   ├── github-contents.ts# GitHub REST API adapter (atomic commits, CAS)
+│       │   ├── idempotency-store.ts # Idempotent save replay
+│       │   └── services.ts       # Services seam resolving adapters at the edge
+│       ├── src/db/schema.ts      # Drizzle D1 database schema
+│       ├── src/templates/        # Post presentation templates (default, two-column)
+│       ├── src/layouts/AdminLayout.astro # Admin shell (site chrome stays in sites)
+│       ├── src/components/article-fragment.astro # The Article, without any page
+│       ├── src/scripts/editor/   # Browser-side CodeMirror and UI controllers
+│       ├── src/content.ts        # defineBlogCollection factory (sites name authors)
+│       ├── migrations/           # D1 database SQL migrations (sites point at these)
+│       └── scripts/              # cms-project-view, cms-create-user bins
+└── sites/
+    └── site-a/                   # Thin site shell: content, chrome, config, deploys
+        ├── astro.config.mjs      # Astro configuration (Cloudflare adapter + MDX loader)
+        ├── wrangler.jsonc        # Worker, D1 binding, migrations_dir into packages/cms
+        ├── src/content/blog/     # Published Post Bundles (git is truth per site)
+        ├── public/uploads/       # Published asset bytes (git is truth per site)
+        ├── src/pages/            # Site + admin routes (admin converts to injectRoute later)
+        ├── src/layouts/root-layout.astro # Site page shell (header/footer/consts)
+        ├── src/middleware.ts     # Delegates auth to cms/lib/services
+        └── src/content.config.ts # Delegates to defineBlogCollection with site authors
 ```
+
+Sites import `cms/*` and `blocks/*`; neither package imports sites, and `blocks/*`
+imports nothing outside itself (the CMS satisfies its structural article-source
+interface). Removing a block is deleting its directory plus its manifest lines:
+drawer cards, toolbar buttons, validation, rendering, styles, and JSON-LD follow,
+and content still using its tag is refused at save naming it. Admin pages stay in
+the site physically (Astro requires `src/pages`) and convert to `injectRoute`
+entrypoints at repo-split; the toolbar contract test documents the move.
 
 ---
 

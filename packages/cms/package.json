@@ -1,0 +1,38 @@
+{
+  "name": "cms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": "./src/*"
+  },
+  "bin": {
+    "cms-project-view": "./scripts/project-published-view.mjs",
+    "cms-create-user": "./scripts/create-user.mjs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^5.20260916.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/state": "^6.7.5",
+    "blocks": "workspace:*",
+    "codemirror": "^6.0.2",
+    "drizzle-orm": "1.0.0-rc.4",
+    "slugify": "^1.6.9",
+    "valibot": "^1.5.0"
+  },
+  "peerDependencies": {
+    "astro": "^7.0.0"
+  },
+  "devDependencies": {
+    "astro": "^7.3.2",
+    "drizzle-kit": "1.0.0-rc.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,21 @@
+---
+export const prerender = false;
+
+import { createServices } from "cms/lib/services";
+import { createDraftPost } from "cms/lib/post-lifecycle";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/admin/login");
+}
+
+const services = createServices(Astro.locals);
+const result = await createDraftPost({ actor: user, services });
+
+if (!result.success || !result.id) {
+  return Astro.redirect("/admin/posts");
+}
+
+return Astro.redirect(`/admin/posts/${result.id}`);
+---
+

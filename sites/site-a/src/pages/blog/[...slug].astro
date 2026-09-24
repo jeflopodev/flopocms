@@ -1,0 +1,32 @@
+---
+import RootLayout from "../../layouts/root-layout.astro";
+import ArticleFragment from "cms/components/article-fragment.astro";
+import { createEnvironmentReadModel, type Article } from "cms/lib/article";
+import { articleDisplayPlan } from "cms/lib/article-display";
+import { createGitBundleSource } from "cms/lib/article-sources/git-bundle";
+
+/**
+ * Production reads the published Post Bundles from main at build time, and renders them
+ * through Article Display — the same module Live Draft Preview renders through, which is
+ * what keeps the two identical.
+ */
+export async function getStaticPaths() {
+  // Built inside this function from imports only: getStaticPaths is hoisted out of the
+  // frontmatter scope, so bindings declared below are not available inside it.
+  const all = await createEnvironmentReadModel(createGitBundleSource()).listVisible();
+  return all.map((article) => ({
+    params: { slug: article.slug },
+    props: { article },
+  }));
+}
+
+type Props = { article: Article };
+
+const { article } = Astro.props;
+const articles = createEnvironmentReadModel(createGitBundleSource());
+const plan = articleDisplayPlan(article, "published", articles);
+---
+
+<RootLayout hasMain={false} title={plan.title} description={plan.description}>
+  <ArticleFragment article={article} articles={articles} mode="published" />
+</RootLayout>

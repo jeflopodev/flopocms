@@ -1,0 +1,34 @@
+---
+import { renderDocument } from "blocks/dsl";
+import { articleDisplayPlan, type DisplayMode } from "../lib/article-display";
+import type { Article, ArticleReadModel } from "../lib/article";
+import { getTemplateComponent } from "../templates";
+
+/**
+ * The Article itself, without any page around it: the Post Template presenting the
+ * Document Renderer's markup, the blocks' stylesheet, and the JSON-LD graph.
+ *
+ * The page shell (layout, title, meta) belongs to the surface — a published page and
+ * Live Draft Preview wrap this same fragment, so the two cannot disagree about what an
+ * Article looks like. The JSON-LD rides in the body, where it is valid and crawler-visible.
+ */
+interface Props {
+  article: Article;
+  /** The read model Blocks read other Articles through. */
+  articles: ArticleReadModel;
+  mode: DisplayMode;
+}
+
+const { article, articles, mode } = Astro.props;
+
+const plan = articleDisplayPlan(article, mode, articles);
+const { html, jsonLd, styles } = await renderDocument(article.content, plan.blockContext);
+const Template = getTemplateComponent(plan.template);
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+<Template {...plan.templateProps}>
+  <Fragment set:html={html} />
+</Template>
+
+<style is:inline set:html={styles} />

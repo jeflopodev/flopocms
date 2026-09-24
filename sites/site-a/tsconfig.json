@@ -1,0 +1,31 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [
+    ".astro/types.d.ts",
+    "**/*",
+    "../../packages/cms/src/**/*"
+  ],
+  "exclude": [
+    "dist"
+  ],
+  "compilerOptions": {
+    "paths": {
+      "#/*": [
+        "./src/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "cms/*": [
+        "../../packages/cms/src/*"
+      ],
+      "blocks/*": [
+        "../../packages/blocks/src/*"
+      ]
+    },
+    "types": [
+      "@cloudflare/workers-types",
+      "node"
+    ]
+  }
+}
