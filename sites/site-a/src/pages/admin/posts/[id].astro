@@ -81,7 +81,9 @@ let expectedSha: string | null | undefined = undefined;
 let expectedRef: string | undefined = undefined;
 if (services.contents) {
   try {
-    const bundle = await services.contents.readFile(`src/content/blog/${post.slug}/index.mdx`);
+    const bundle = await services.contents.readFile(
+      `${services.contentDir}/${post.slug}/index.mdx`
+    );
     expectedSha = bundle?.sha ?? null;
   } catch {
     expectedSha = undefined;

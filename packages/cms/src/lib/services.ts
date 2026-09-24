@@ -1,6 +1,6 @@
 import type { DbClient } from "./db";
 import { getDb } from "./db";
-import { getGithubPat } from "./env";
+import { getContentDir, getGithubPat, getUploadsDir } from "./env";
 import { DEFAULT_REPO, HttpGithubContents, type GithubContents } from "./github-contents";
 import { getMediaStorage, type MediaStorage } from "./media-storage";
 import { createD1LockStore, type LockStore } from "./locks";
@@ -39,6 +39,10 @@ export interface Services {
   accounts: EditorAccounts;
   /** Idempotent save replay, keyed by client `Idempotency-Key`. */
   idempotency: IdempotencyStore;
+  /** Repo-relative Post Bundle base on `main` (per site, via CONTENT_DIR). */
+  contentDir: string;
+  /** Repo-relative asset bytes base on `main` (per site, via UPLOADS_DIR). */
+  uploadsDir: string;
   clock: Clock;
 }
 
@@ -53,7 +57,9 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
         : null;
 
   const clock = overrides.clock ?? systemClock;
-  const media = overrides.media ?? getMediaStorage(contents);
+  const contentDir = overrides.contentDir ?? getContentDir(locals);
+  const uploadsDir = overrides.uploadsDir ?? getUploadsDir(locals);
+  const media = overrides.media ?? getMediaStorage(contents, uploadsDir);
 
   return {
     db,
@@ -65,6 +71,8 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
     assets: overrides.assets ?? createD1AssetRegistry(db, media),
     accounts: overrides.accounts ?? createD1EditorAccounts(db, clock),
     idempotency: overrides.idempotency ?? createD1IdempotencyStore(db, clock),
+    contentDir,
+    uploadsDir,
     clock,
   };
 }

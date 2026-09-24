@@ -9,7 +9,11 @@
  * no filesystem at all, and so a test can never write into the source tree.
  */
 
-/** Where Post Bundles live, on disk and on `main`. */
+/**
+ * Where Post Bundles live on local disk, relative to the process working directory.
+ * Local development runs from the site directory, so this stays checkout-relative;
+ * GitHub paths on `main` come from `Services.contentDir` instead (per site).
+ */
 export const BLOG_DIR = "src/content/blog";
 
 export interface ArticleMirror {

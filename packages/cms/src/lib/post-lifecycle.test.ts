@@ -16,12 +16,13 @@ import { createNoopArticleMirror, type ArticleMirror } from "./article-mirror";
 import type { AssetRegistry } from "./asset-registry";
 import type { EditorAccounts } from "./editor-accounts";
 import { InMemoryIdempotencyStore } from "./idempotency-store";
+import { DEFAULT_CONTENT_DIR, DEFAULT_UPLOADS_DIR } from "./env";
 import type { Services } from "./services";
 import type { DbClient } from "./db";
 
 const NOW = "2026-09-21T12:00:00.000Z";
-const BUNDLE = "src/content/blog/untitled-article/index.mdx";
-const LEGACY_FLAT_FILE = "src/content/blog/untitled-article.mdx";
+const BUNDLE = `${DEFAULT_CONTENT_DIR}/untitled-article/index.mdx`;
+const LEGACY_FLAT_FILE = `${DEFAULT_CONTENT_DIR}/untitled-article.mdx`;
 
 const actor = { id: "user-1", username: "jeflopo" };
 
@@ -54,6 +55,8 @@ interface TestDeps {
   contents?: InMemoryGithubContents | null;
   locks?: InMemoryLockStore;
   mirror?: ArticleMirror;
+  contentDir?: string;
+  uploadsDir?: string;
 }
 
 /** A record store that refuses the projection write, as an unavailable D1 would. */
@@ -77,6 +80,8 @@ function testServices(deps: TestDeps = {}): Services {
     assets: undefined as unknown as AssetRegistry,
     accounts: undefined as unknown as EditorAccounts,
     idempotency: new InMemoryIdempotencyStore(() => new Date(NOW)),
+    contentDir: deps.contentDir ?? DEFAULT_CONTENT_DIR,
+    uploadsDir: deps.uploadsDir ?? DEFAULT_UPLOADS_DIR,
     clock: { now: () => new Date(NOW) },
   };
 }
@@ -328,7 +333,7 @@ describe("publishing an Article", () => {
   it("publishes when every referenced upload is on main", async () => {
     const posts = new InMemoryPostStore();
     const contents = new InMemoryGithubContents();
-    contents.seedFile("public/uploads/hero.webp", "bytes");
+    contents.seedFile(`${DEFAULT_UPLOADS_DIR}/hero.webp`, "bytes");
 
     const res = await savePostLifecycle({
       payload: payload({

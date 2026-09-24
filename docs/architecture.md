@@ -121,14 +121,18 @@ export interface Services {
   assets: AssetRegistry;
   accounts: EditorAccounts;
   idempotency: IdempotencyStore;
+  contentDir: string;
+  uploadsDir: string;
   clock: Clock;
 }
 ```
 
+`contentDir` / `uploadsDir` are the repo-relative Post Bundle and asset bases on `main`, resolved per site from `CONTENT_DIR` / `UPLOADS_DIR` runtime vars. The local mirror stays checkout-relative; GitHub paths never hardcode a site layout, so a second site changes vars, not code.
+
 - **`PostStore` (`src/lib/post-store.ts`)**: Editorial record persistence seam. Implemented by `createD1PostStore` in production and `InMemoryPostStore` for tests.
 - **`LockStore` (`src/lib/locks.ts`)**: Pessimistic locking seam with time-to-live verification. Implemented by `createD1LockStore` and `InMemoryLockStore`.
-- **`GithubContents` (`src/lib/github-contents.ts`)**: The sole gateway to GitHub's REST API, reading, writing and removing files (a Post Bundle under `src/content/blog/`, or media under `public/uploads/`). Nothing branches: ADR-0009 made publishing a direct commit to `main`, so the module's verb list has no branch in it. Uses `HttpGithubContents` or `InMemoryGithubContents`.
-- **`MediaStorage` (`src/lib/media-storage.ts`)**: Stores asset bytes (commit to `public/uploads/` via GitHub in production, or write to local disk during local development).
+- **`GithubContents` (`src/lib/github-contents.ts`)**: The sole gateway to GitHub's REST API, reading, writing and removing files (a Post Bundle under the site's content dir, or media under its uploads dir). Nothing branches: ADR-0009 made publishing a direct commit to `main`, so the module's verb list has no branch in it. Uses `HttpGithubContents` or `InMemoryGithubContents`.
+- **`MediaStorage` (`src/lib/media-storage.ts`)**: Stores asset bytes (commit to the site's uploads dir via GitHub in production, or write to local disk during local development).
 - **`AssetRegistry` (`src/lib/asset-registry.ts`)**: Unified seam synchronizing D1 asset records and `MediaStorage` bytes.
 - **`Clock` (`src/lib/clock.ts`)**: Abstraction over time (`systemClock` vs. `FixedClock`), ensuring zero non-deterministic timestamps in tests.
 

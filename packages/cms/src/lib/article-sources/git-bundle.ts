@@ -3,7 +3,7 @@ import type { ImageMetadata } from "astro";
 import type { Article, ArticleSource, BundledHeroImage, HeroImage, TemplateId } from "../article";
 
 /**
- * The Git bundle source: reads Post Bundles from `src/content/blog/<slug>/index.mdx`
+ * The Git bundle source: reads Post Bundles from `<site>/src/content/blog/<slug>/index.mdx`
  * through the Astro content collection, which already yields parsed metadata and the
  * raw body. Only usable inside an Astro build, which is where production pages run.
  *

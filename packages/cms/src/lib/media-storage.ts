@@ -17,15 +17,24 @@ export interface MediaStorage {
   deleteMedia(filename: string): Promise<MediaStorageResult>;
 }
 
-/** Uploads land in the global Asset Registry path, so every Article can reference them. */
-export const UPLOADS_DIR = "public/uploads";
-const UPLOADS_PREFIX = `${UPLOADS_DIR}/`;
-
 export class GitHubMediaAdapter implements MediaStorage {
-  constructor(private readonly contents: GithubContents) {}
+  /**
+   * @param uploadsDir Repo-relative asset base on `main` (per site, via
+   * `Services.uploadsDir`). Uploads land in the global Asset Registry path,
+   * so every Article can reference them.
+   */
+  constructor(
+    private readonly contents: GithubContents,
+    private readonly uploadsDir: string
+  ) {}
+
+  private get prefix(): string {
+    const base = this.uploadsDir.replace(/\/+$/, "");
+    return `${base}/`;
+  }
 
   async writeMedia(file: MediaFile): Promise<MediaStorageResult> {
-    const res = await this.contents.putFile(`${UPLOADS_PREFIX}${file.filename}`, file.content, {
+    const res = await this.contents.putFile(`${this.prefix}${file.filename}`, file.content, {
       // Assets are not content: skip the production build they would otherwise trigger.
       message: `media(global): upload ${file.filename} [skip ci]`,
     });
@@ -37,7 +46,7 @@ export class GitHubMediaAdapter implements MediaStorage {
   }
 
   async deleteMedia(filename: string): Promise<MediaStorageResult> {
-    const res = await this.contents.deleteFile(`${UPLOADS_PREFIX}${filename}`, {
+    const res = await this.contents.deleteFile(`${this.prefix}${filename}`, {
       message: `media(global): delete ${filename}`,
     });
     return { success: res.success, error: res.error };
@@ -147,11 +156,11 @@ export class InMemoryMediaAdapter implements MediaStorage {
  * GitHub storage is used only when a Contents module is available; local disk is
  * used only when a Node filesystem exists. Both means: keep them in step.
  */
-export function getMediaStorage(contents: GithubContents | null): MediaStorage {
+export function getMediaStorage(contents: GithubContents | null, uploadsDir: string): MediaStorage {
   const adapters: MediaStorage[] = [];
 
   if (contents) {
-    adapters.push(new GitHubMediaAdapter(contents));
+    adapters.push(new GitHubMediaAdapter(contents, uploadsDir));
   }
 
   if (typeof process !== "undefined" && process.versions?.node) {

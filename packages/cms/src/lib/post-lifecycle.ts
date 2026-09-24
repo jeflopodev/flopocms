@@ -1,7 +1,5 @@
 import { inspectDocument, type DocumentProblem } from "blocks/dsl/parser";
 import { referencedUploads } from "blocks/insertion";
-import { BLOG_DIR } from "./article-mirror";
-import { UPLOADS_DIR } from "./media-storage";
 import type { ArticleWriteModel } from "./article-write-model";
 import { toPostRecord } from "./article-write-model";
 import type { PostRecord } from "./post-store";
@@ -140,7 +138,7 @@ export async function savePostLifecycle(options: {
   services: Services;
 }): Promise<SavePostResult> {
   const { payload, actor, services } = options;
-  const { posts, locks, mirror, contents, clock } = services;
+  const { posts, locks, mirror, contents, clock, contentDir, uploadsDir } = services;
 
   const { id, slug, title, status } = payload;
 
@@ -212,7 +210,7 @@ export async function savePostLifecycle(options: {
   //    is committed before the editorial record claims the Article is published, and
   //    removed before the record calls it a Draft again. A refused commit therefore
   //    changes nothing rather than leaving a row no reader can see.
-  const targetPath = `${BLOG_DIR}/${record.slug}/index.mdx`;
+  const targetPath = `${contentDir}/${record.slug}/index.mdx`;
   let committedToGitHub = false;
   let lastCommitSha: string | undefined;
   let message = "";
@@ -221,7 +219,7 @@ export async function savePostLifecycle(options: {
 
   const expectedSha = payload.expected_sha;
   const expectedRef = payload.expected_ref;
-  const bundleDir = `${BLOG_DIR}/${record.slug}`;
+  const bundleDir = `${contentDir}/${record.slug}`;
 
   if (isDraft && wasPublished) {
     if (!contents) {
@@ -325,7 +323,7 @@ export async function savePostLifecycle(options: {
       featuredImage: record.featuredImage,
     });
     if (neededUploads.length > 0) {
-      const listed = await contents.listDirectory(UPLOADS_DIR);
+      const listed = await contents.listDirectory(uploadsDir);
       if (!listed.success) {
         console.error("GitHub uploads listing error:", listed.error);
         return {
@@ -430,7 +428,7 @@ export async function deletePostLifecycle(options: {
   services: Services;
 }): Promise<DeletePostResult> {
   const { id, services } = options;
-  const { posts, mirror, contents } = services;
+  const { posts, mirror, contents, contentDir } = services;
 
   if (!id) {
     return { success: false, deletedFromGitHub: false, error: "Missing post ID" };
@@ -454,7 +452,7 @@ export async function deletePostLifecycle(options: {
       };
     }
 
-    const bundle = await contents.deleteDirectory(`${BLOG_DIR}/${slug}`, {
+    const bundle = await contents.deleteDirectory(`${contentDir}/${slug}`, {
       message: `feat(blog): delete "${slug}" bundle`,
     });
 
@@ -473,10 +471,10 @@ export async function deletePostLifecycle(options: {
     // Shared asset bytes under `public/uploads/` stay: other Articles may reference
     // them, and an upload's commit is its own add. Only the bundle goes.
     // Legacy flat files from before Post Bundles existed
-    const legacyMdx = await contents.deleteFile(`${BLOG_DIR}/${slug}.mdx`, {
+    const legacyMdx = await contents.deleteFile(`${contentDir}/${slug}.mdx`, {
       message: `feat(blog): delete post ${slug}.mdx`,
     });
-    const legacyMd = await contents.deleteFile(`${BLOG_DIR}/${slug}.md`, {
+    const legacyMd = await contents.deleteFile(`${contentDir}/${slug}.md`, {
       message: `feat(blog): delete post ${slug}.md`,
     });
 

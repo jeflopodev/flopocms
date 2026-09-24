@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_UPLOADS_DIR } from "./env";
 import { InMemoryGithubContents } from "./github-contents";
 import { GitHubMediaAdapter } from "./media-storage";
+
+const STORED = `${DEFAULT_UPLOADS_DIR}/hero.webp`;
 
 describe("GitHubMediaAdapter", () => {
   it("writes media into the global upload path and skips the production build", async () => {
     const contents = new InMemoryGithubContents();
-    const media = new GitHubMediaAdapter(contents);
+    const media = new GitHubMediaAdapter(contents, DEFAULT_UPLOADS_DIR);
 
     const res = await media.writeMedia({
       filename: "hero.webp",
@@ -14,10 +17,10 @@ describe("GitHubMediaAdapter", () => {
     });
 
     expect(res).toEqual({ success: true, url: "/uploads/hero.webp" });
-    expect(contents.has("public/uploads/hero.webp")).toBe(true);
+    expect(contents.has(STORED)).toBe(true);
     expect(contents.commits[0]).toEqual({
       action: "put",
-      path: "public/uploads/hero.webp",
+      path: STORED,
       message: "media(global): upload hero.webp [skip ci]",
     });
   });
@@ -31,7 +34,7 @@ describe("GitHubMediaAdapter", () => {
       deleteDirectory: async () => ({ success: true, deleted: false }),
       commitFiles: async () => ({ success: false, error: "quota exceeded" }),
       listDirectory: async () => ({ success: true, paths: [] }),
-    });
+    }, DEFAULT_UPLOADS_DIR);
 
     const res = await media.writeMedia({ filename: "big.zip", content: new Uint8Array([1]) });
 
@@ -40,11 +43,11 @@ describe("GitHubMediaAdapter", () => {
 
   it("deletes media from the global upload path", async () => {
     const contents = new InMemoryGithubContents();
-    contents.seedFile("public/uploads/hero.webp", "bytes");
-    const media = new GitHubMediaAdapter(contents);
+    contents.seedFile(STORED, "bytes");
+    const media = new GitHubMediaAdapter(contents, DEFAULT_UPLOADS_DIR);
 
     expect(await media.deleteMedia("hero.webp")).toMatchObject({ success: true });
-    expect(contents.has("public/uploads/hero.webp")).toBe(false);
+    expect(contents.has(STORED)).toBe(false);
     expect(contents.commits[0].message).toBe("media(global): delete hero.webp");
   });
 });
