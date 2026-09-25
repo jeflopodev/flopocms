@@ -1,4 +1,4 @@
-import { EditorView, basicSetup } from "codemirror";
+import { EditorView, minimalSetup } from "codemirror";
 import { Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorSession } from "./editor-session";
@@ -56,12 +56,6 @@ const themeConfig = EditorView.theme({
   },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
     backgroundColor: "rgba(79, 70, 229, 0.18)",
-  },
-  ".cm-gutters": {
-    backgroundColor: "var(--bg-surface-elevated)",
-    color: "var(--text-muted)",
-    borderRight: "1px solid var(--border-subtle)",
-    paddingRight: "8px",
   },
 });
 
@@ -130,7 +124,7 @@ export function initEditor(data: EditorInitData): void {
   const editorView = new EditorView({
     doc: post.content_mdx || "",
     extensions: [
-      basicSetup,
+      minimalSetup,
       markdown(),
       EditorView.lineWrapping,
       editableCompartment.of(EditorView.editable.of(!session.isReadOnly)),

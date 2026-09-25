@@ -454,9 +454,15 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
             </p>
           </div>
 
-          <!-- Block cards are rendered from the Block Registry, so a new block adds no markup here -->
+          <!-- Block cards are rendered from the Block Registry, so a new block adds no markup here.
+               Each card inserts its primary snippet: a whole-card button, no preview, no inner buttons. -->
           {editorCards.map((card) => (
-            <div class="block-card">
+            <button
+              type="button"
+              class="block-card"
+              data-snippet={`\n${card.insertions[0].snippet}\n`}
+              title={`Insert ${card.tagName}`}
+            >
               <div class="block-card-header">
                 <div class="block-icon" set:html={card.icon} />
                 <div>
@@ -464,22 +470,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
                   <span class="block-desc">{card.description}</span>
                 </div>
               </div>
-              <p class="block-preview-code">{card.preview}</p>
-              <div class:list={[{ "callout-insert-grid": card.insertions.length > 1 }]}>
-                {card.insertions.map((insertion) => (
-                  <button
-                    type="button"
-                    class:list={[{
-                      "btn-callout": card.insertions.length > 1,
-                      "btn-insert-block": card.insertions.length <= 1,
-                    }]}
-                    data-snippet={`\n${insertion.snippet}\n`}
-                  >
-                    {insertion.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            </button>
           ))}
         </div>
       </aside>

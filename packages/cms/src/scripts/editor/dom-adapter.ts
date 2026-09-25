@@ -322,9 +322,9 @@ export class EditorDomAdapter {
       });
     }
 
-    // Block insertion snippet clicks
+    // Block insertion snippet clicks: the whole card is the button.
     if (this.options?.insertSnippet) {
-      document.querySelectorAll(".btn-insert-block, .btn-callout").forEach((btn) => {
+      document.querySelectorAll(".block-card[data-snippet]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const snippet = (btn as HTMLElement).dataset.snippet;
           if (snippet) this.options?.insertSnippet?.(snippet);

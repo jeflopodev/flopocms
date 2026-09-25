@@ -242,6 +242,7 @@
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 1rem;
   gap: 0.4rem;
   flex-shrink: 0;
@@ -469,18 +470,29 @@
 }
 
 .block-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 1rem;
   margin-bottom: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.block-card:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.06);
 }
 
 .block-card-header {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.6rem;
 }
 
 .block-icon {
@@ -504,59 +516,6 @@
 .block-desc {
   font-size: 0.75rem;
   color: var(--text-muted);
-}
-
-.block-preview-code {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  background: var(--bg-body);
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-sm);
-  margin: 0.5rem 0;
-  color: var(--text-secondary);
-  overflow-x: auto;
-}
-
-.btn-insert-block {
-  width: 100%;
-  padding: 0.45rem;
-  background: transparent;
-  border: 1px dashed var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--primary-light);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-insert-block:hover {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: var(--primary);
-}
-
-.callout-insert-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.35rem;
-}
-
-.btn-callout {
-  padding: 0.35rem 0.2rem;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-body);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-callout:hover {
-  background: rgba(99, 102, 241, 0.12);
-  border-color: var(--primary);
-  color: var(--primary);
 }
 
 /* Asset Picker Dialog Modal */
