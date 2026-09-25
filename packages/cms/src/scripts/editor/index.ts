@@ -33,7 +33,6 @@ export interface EditorInitData {
 const themeConfig = EditorView.theme({
   "&": {
     height: "100%",
-    fontSize: "15px",
     color: "var(--text-primary)",
     backgroundColor: "var(--bg-surface)",
   },
@@ -121,6 +120,24 @@ export function initEditor(data: EditorInitData): void {
 
   const editableCompartment = new Compartment();
 
+  // Editor font size, adjustable with Ctrl/Cmd + +/- (Ctrl/Cmd + 0 resets).
+  // A compartment so zoom is a theme reconfigure, not a fight with the base theme.
+  const DEFAULT_FONT_SIZE = 15;
+  const MIN_FONT_SIZE = 11;
+  const MAX_FONT_SIZE = 24;
+  const FONT_SIZE_STORAGE_KEY = "editor-font-size";
+  const fontSizeCompartment = new Compartment();
+  const fontSizeTheme = (px: number) => EditorView.theme({ "&": { fontSize: `${px}px` } });
+  let fontSize = DEFAULT_FONT_SIZE;
+  try {
+    const stored = Number(localStorage.getItem(FONT_SIZE_STORAGE_KEY));
+    if (Number.isFinite(stored) && stored) {
+      fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(stored)));
+    }
+  } catch {
+    // Private mode or no storage: fall back to the default size.
+  }
+
   const editorView = new EditorView({
     doc: post.content_mdx || "",
     extensions: [
@@ -129,11 +146,40 @@ export function initEditor(data: EditorInitData): void {
       EditorView.lineWrapping,
       editableCompartment.of(EditorView.editable.of(!session.isReadOnly)),
       themeConfig,
+      fontSizeCompartment.of(fontSizeTheme(fontSize)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) session.markDirty();
       }),
     ],
     parent: container,
+  });
+
+  function setFontSize(px: number): void {
+    fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(px)));
+    editorView.dispatch({
+      effects: fontSizeCompartment.reconfigure(fontSizeTheme(fontSize)),
+    });
+    try {
+      localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
+    } catch {
+      // Zoom still applies for this session; it just won't persist.
+    }
+  }
+
+  // Scoped to the editor DOM so browser-page zoom elsewhere keeps working.
+  // "=" covers Ctrl+= (unshifted + key); "+" covers Shift+= and NumpadAdd.
+  editorView.dom.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      setFontSize(fontSize + 1);
+    } else if (e.key === "-" || e.key === "_") {
+      e.preventDefault();
+      setFontSize(fontSize - 1);
+    } else if (e.key === "0") {
+      e.preventDefault();
+      setFontSize(DEFAULT_FONT_SIZE);
+    }
   });
 
   // CodeMirror adapter: read-only reaches the document itself, so a lock conflict
