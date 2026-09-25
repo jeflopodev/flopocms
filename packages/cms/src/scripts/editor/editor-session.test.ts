@@ -189,6 +189,23 @@ describe("Idempotent saves", () => {
   });
 });
 
+describe("Stale projections", () => {
+  it("stays dirty when main took the bundle but the record write failed", async () => {
+    const session = sessionWith(async () => ({
+      ...saved,
+      projectedToD1: false,
+      message: "Published to main. The editorial record is stale.",
+    }));
+
+    session.markDirty();
+    await session.saveRequested("published");
+
+    expect(session.getSnapshot()).toMatchObject({ phase: "dirty" });
+    expect(session.getSnapshot().message).toContain("stale");
+    expect(session.hasUnsavedChanges).toBe(true);
+  });
+});
+
 describe("Subscribers", () => {
   it("receives the current snapshot immediately and every change after", () => {
     const session = sessionWith(async () => saved);

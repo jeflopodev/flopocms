@@ -42,6 +42,38 @@ describe("inspectDocument", () => {
     expect(problems.some((problem) => problem.message.includes("</Quote> has no opening tag"))).toBe(true);
   });
 
+  it("refuses a closing block tag glued to text, naming the line", () => {
+    // Observed live: the preview renders `<Tag>\ntext</Tag>` fine, but Astro's MDX
+    // loader rejects it and the deploy reds. Single-line elements and closings
+    // alone on their line are the legal spellings.
+    const problems = problemsOf(`<Paragraph>\nBody text</Paragraph>`);
+
+    expect(problems).toEqual([
+      expect.objectContaining({
+        severity: "suspect",
+        code: "closing-tag-not-alone",
+        tagName: "Paragraph",
+      }),
+    ]);
+    expect(problems[0].message).toContain("line 2");
+  });
+
+  it("accepts closings alone on their line or sharing it with their opening tag", () => {
+    expect(problemsOf(`<Paragraph>Body</Paragraph>`)).toEqual([]);
+    expect(problemsOf(`<Paragraph>\nBody\n</Paragraph>`)).toEqual([]);
+    expect(
+      problemsOf(`<Callout variant="note">\n  <Paragraph>Body</Paragraph>\n</Callout>`)
+    ).toEqual([]);
+  });
+
+  it("ignores inline marks, self-closing tags, and tags no Block owns", () => {
+    expect(problemsOf(`<Paragraph><Bold>hi</Bold></Paragraph>`)).toEqual([]);
+    expect(problemsOf(`<YouTube id="x" />`)).toEqual([]);
+    expect(problemsOf(`<Mystery>\ntext</Mystery>`).map((problem) => problem.code)).not.toContain(
+      "closing-tag-not-alone"
+    );
+  });
+
   it("reports an unterminated comment swallowing the rest of the document", () => {
     const problems = problemsOf(`<Paragraph>Body</Paragraph>\n<!-- half a note`);
 

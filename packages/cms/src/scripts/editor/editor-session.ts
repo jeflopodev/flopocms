@@ -30,6 +30,8 @@ export interface SaveOutcome {
   /** Fresh CAS base for the next save, when the server reports one. */
   sha?: string;
   commitSha?: string;
+  /** False when main took the bundle but the editorial record write failed. */
+  projectedToD1?: boolean;
 }
 
 export interface SessionSnapshot {
@@ -152,6 +154,12 @@ export class EditorSession {
       this.slug = outcome.slug || this.slug;
       if (outcome.sha !== undefined) this.expectedSha = outcome.sha;
       if (outcome.commitSha) this.expectedRef = outcome.commitSha;
+      // The Article is live but the record is stale: the work is not fully saved,
+      // so it stays dirty (and the buttons stay armed) until a re-save heals it.
+      if (outcome.projectedToD1 === false) {
+        this.set("dirty", outcome.message || "Guardado en main; reintentar para el registro");
+        return;
+      }
       this.set(
         "saved",
         outcome.message || (this.status === "published" ? "Publicado en GitHub & D1" : "Borrador guardado en D1")

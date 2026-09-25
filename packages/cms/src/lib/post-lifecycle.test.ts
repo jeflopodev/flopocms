@@ -363,6 +363,23 @@ describe("publishing an Article", () => {
     expect(contents.commits).toEqual([]);
   });
 
+  it("skips the commit when main already holds the exact bundle", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+    const services = () => testServices({ posts, contents });
+
+    const first = await savePostLifecycle({ payload: payload({ status: "published" }), actor, services: services() });
+    expect(first).toMatchObject({ success: true, committedToGitHub: true });
+
+    const commitsAfterFirst = contents.commits.length;
+    const second = await savePostLifecycle({ payload: payload({ status: "published" }), actor, services: services() });
+
+    expect(second).toMatchObject({ success: true, committedToGitHub: false });
+    expect(second.message).toContain("Already published");
+    expect(contents.commits).toHaveLength(commitsAfterFirst);
+    expect(posts.all()[0].status).toBe("published");
+  });
+
   it("refuses a publish based on a stale ref", async () => {
     const posts = new InMemoryPostStore();
     const contents = new InMemoryGithubContents();
@@ -492,6 +509,36 @@ describe("a body the Document Parser cannot fully resolve", () => {
 
     const res = await savePostLifecycle({
       payload: payload({ status: "published", content_mdx: SUSPECT }),
+      actor,
+      services: testServices({ posts, contents }),
+    });
+
+    expect(res).toMatchObject({ success: false, status: 422 });
+    expect(res.error).toContain("Cannot publish");
+    expect(contents.commits).toEqual([]);
+    expect(posts.all()).toEqual([]);
+  });
+
+  it("lets a Draft through with a glued closing tag, and says so", async () => {
+    const posts = new InMemoryPostStore();
+
+    const res = await savePostLifecycle({
+      payload: payload({ content_mdx: "<Paragraph>\nBody text</Paragraph>" }),
+      actor,
+      services: testServices({ posts }),
+    });
+
+    expect(res).toMatchObject({ success: true, status: 200 });
+    expect(res.problems?.map((problem) => problem.code)).toContain("closing-tag-not-alone");
+    expect(posts.all()).toHaveLength(1);
+  });
+
+  it("refuses to publish a glued closing tag, before anything is written", async () => {
+    const posts = new InMemoryPostStore();
+    const contents = new InMemoryGithubContents();
+
+    const res = await savePostLifecycle({
+      payload: payload({ status: "published", content_mdx: "<Paragraph>\nBody text</Paragraph>" }),
       actor,
       services: testServices({ posts, contents }),
     });

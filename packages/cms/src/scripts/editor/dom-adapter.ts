@@ -162,7 +162,10 @@ export class EditorDomAdapter {
   private renderActions(snapshot: SessionSnapshot): void {
     const isPublished = snapshot.status === "published";
     const busy = snapshot.phase === "saving";
-    const disabled = snapshot.readOnly || busy;
+    // Clean means saved: with nothing to write the buttons stand down instead of
+    // inviting another click that can only produce an identical commit.
+    const hasChanges = snapshot.phase === "dirty" || snapshot.phase === "error";
+    const disabled = snapshot.readOnly || busy || !hasChanges;
 
     if (isPublished) {
       if (this.primaryBtnText) this.primaryBtnText.textContent = "Guardar Cambios";

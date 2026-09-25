@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import type { BlockNode, InlineSpan, Mark, MarkDef } from "../types";
-import { getBlock } from "../registry";
+import { getBlock, isRegisteredTag } from "../registry";
 import { MARK_TAG_ALIASES } from "../marks";
 
 interface TokenTag {
@@ -249,7 +249,8 @@ function generateNodeId(prefix = "block"): string {
  * `unrenderable` means the Document Renderer can only emit a fallback wrapper for it —
  * publishing it produces a page a reader can see is broken. `suspect` means the tag is
  * known but its props did not match the Block's schema and the defaults were used
- * instead, so the block renders, possibly with the wrong values.
+ * instead, so the block renders, possibly with the wrong values. It also covers shapes
+ * the preview renders but the production build rejects, which must never be committed.
  */
 export type DocumentProblemSeverity = "unrenderable" | "suspect";
 
@@ -257,7 +258,8 @@ export type DocumentProblemCode =
   | "unknown-block"
   | "invalid-props"
   | "recovered-tag"
-  | "unterminated-comment";
+  | "unterminated-comment"
+  | "closing-tag-not-alone";
 
 export interface DocumentProblem {
   severity: DocumentProblemSeverity;
@@ -474,6 +476,30 @@ export function inspectDocument(dslContent: string): DocumentInspection {
     };
     appendChild(node);
   }
+
+  // A closing block tag glued to text breaks the production build while the preview
+  // renders it fine: Astro's MDX loader rejects `<Tag>\ntext</Tag>` (observed live —
+  // a publish with this shape reddened the deploy), so it must never be committed.
+  // Single-line elements and closings alone on their line are the legal spellings.
+  // Residual: a closing tag typed inside a CodeBlock sample or an HTML comment trips
+  // this too — a 422 naming the line, never a silent break, and drafts still save.
+  const lines = dslContent.split(/\r?\n/);
+  lines.forEach((line, index) => {
+    for (const closing of line.matchAll(/<\/([A-Za-z][A-Za-z0-9]*)>/g)) {
+      const tagName = closing[1];
+      if (!isRegisteredTag(tagName)) continue;
+      const before = line.slice(0, closing.index);
+      const sharesLineWithOpen = new RegExp(`<${tagName}(?=[\\s/>])`).test(before);
+      if (before.trim() !== "" && !sharesLineWithOpen) {
+        problems.push({
+          severity: "suspect",
+          code: "closing-tag-not-alone",
+          tagName,
+          message: `</${tagName}> shares line ${index + 1} with text — put closing tags on their own line so the production build parses the bundle`,
+        });
+      }
+    }
+  });
 
   return { blocks: rootBlocks, problems };
 }

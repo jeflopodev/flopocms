@@ -301,79 +301,84 @@ export async function savePostLifecycle(options: {
       };
     }
 
-    if (expectedSha !== undefined) {
-      const current = await contents.readFile(targetPath);
-      const currentSha = current?.sha ?? null;
-      if (currentSha !== expectedSha) {
-        return {
-          success: false,
-          status: 409,
-          id,
-          slug: record.slug,
-          error: `Nothing was published: "${record.slug}" moved on main. Reload and merge.`,
-        };
-      }
-    }
-
-    // Uploads commit at upload time and deletes commit at delete time, so a file
-    // the bundle references but `main` does not have means someone deleted it after
-    // it was inserted. Refuse rather than ship a reader a broken image or download.
-    const neededUploads = referencedUploads({
-      contentMdx: record.contentMdx,
-      featuredImage: record.featuredImage,
-    });
-    if (neededUploads.length > 0) {
-      const listed = await contents.listDirectory(uploadsDir);
-      if (!listed.success) {
-        console.error("GitHub uploads listing error:", listed.error);
-        return {
-          success: false,
-          status: 502,
-          id,
-          slug: record.slug,
-          error: `Nothing was published: could not verify asset bytes on main (${listed.error}).`,
-        };
-      }
-      const present = new Set(
-        (listed.paths ?? []).map((entry) => entry.split("/").filter(Boolean).pop() as string)
-      );
-      const missing = neededUploads.filter((name) => !present.has(name));
-      if (missing.length > 0) {
-        const quoted = missing.map((name) => `"/uploads/${name}"`).join(", ");
-        return {
-          success: false,
-          status: 422,
-          problems: inspection.problems,
-          id,
-          slug: record.slug,
-          error:
-            `Cannot publish: ${quoted} ${missing.length === 1 ? "is" : "are"} referenced ` +
-            `but absent on main (deleted?). Re-upload ${missing.length === 1 ? "it" : "them"} or remove the reference.`,
-        };
-      }
-    }
-
-    const commit = await contents.commitFiles([{ path: targetPath, content: bundle }], {
-      message: `feat(blog): publish "${title}" by @${author}`,
-      baseRefSha: expectedRef,
-    });
-
-    if (!commit.success) {
-      console.error("GitHub commit to main error:", commit.error);
+    const current = await contents.readFile(targetPath);
+    const currentSha = current?.sha ?? null;
+    if (expectedSha !== undefined && currentSha !== expectedSha) {
       return {
         success: false,
-        status: commit.conflict ? 409 : 502,
+        status: 409,
         id,
         slug: record.slug,
-        error: commit.conflict
-          ? `Nothing was published: "${record.slug}" moved on main. Reload and merge.`
-          : `Nothing was published: GitHub refused the commit (${commit.error}).`,
+        error: `Nothing was published: "${record.slug}" moved on main. Reload and merge.`,
       };
     }
 
-    committedToGitHub = true;
-    lastCommitSha = commit.commitSha;
-    message = "Published to main on GitHub & saved to D1.";
+    // A byte-identical re-save commits nothing: pushing an empty diff would move
+    // main without triggering any workflow and read as a silent success. The D1
+    // projection below still runs, so a stale record heals without a commit.
+    if (current?.content === bundle) {
+      message = "Already published: main holds exactly this bundle. Editorial record refreshed.";
+    } else {
+      // Uploads commit at upload time and deletes commit at delete time, so a file
+      // the bundle references but `main` does not have means someone deleted it after
+      // it was inserted. Refuse rather than ship a reader a broken image or download.
+      const neededUploads = referencedUploads({
+        contentMdx: record.contentMdx,
+        featuredImage: record.featuredImage,
+      });
+      if (neededUploads.length > 0) {
+        const listed = await contents.listDirectory(uploadsDir);
+        if (!listed.success) {
+          console.error("GitHub uploads listing error:", listed.error);
+          return {
+            success: false,
+            status: 502,
+            id,
+            slug: record.slug,
+            error: `Nothing was published: could not verify asset bytes on main (${listed.error}).`,
+          };
+        }
+        const present = new Set(
+          (listed.paths ?? []).map((entry) => entry.split("/").filter(Boolean).pop() as string)
+        );
+        const missing = neededUploads.filter((name) => !present.has(name));
+        if (missing.length > 0) {
+          const quoted = missing.map((name) => `"/uploads/${name}"`).join(", ");
+          return {
+            success: false,
+            status: 422,
+            problems: inspection.problems,
+            id,
+            slug: record.slug,
+            error:
+              `Cannot publish: ${quoted} ${missing.length === 1 ? "is" : "are"} referenced ` +
+              `but absent on main (deleted?). Re-upload ${missing.length === 1 ? "it" : "them"} or remove the reference.`,
+          };
+        }
+      }
+
+      const commit = await contents.commitFiles([{ path: targetPath, content: bundle }], {
+        message: `feat(blog): publish "${title}" by @${author}`,
+        baseRefSha: expectedRef,
+      });
+
+      if (!commit.success) {
+        console.error("GitHub commit to main error:", commit.error);
+        return {
+          success: false,
+          status: commit.conflict ? 409 : 502,
+          id,
+          slug: record.slug,
+          error: commit.conflict
+            ? `Nothing was published: "${record.slug}" moved on main. Reload and merge.`
+            : `Nothing was published: GitHub refused the commit (${commit.error}).`,
+        };
+      }
+
+      committedToGitHub = true;
+      lastCommitSha = commit.commitSha;
+      message = "Published to main on GitHub & saved to D1.";
+    }
   }
 
   // 7. The projection: the record now describes what main holds. A projection that fails

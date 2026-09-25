@@ -114,6 +114,7 @@ export function initEditor(data: EditorInitData): void {
             error: body.error,
             sha: body.sha,
             commitSha: body.commitSha,
+            projectedToD1: body.projectedToD1,
           };
         }
 
