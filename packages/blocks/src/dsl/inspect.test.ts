@@ -94,6 +94,59 @@ describe("inspectDocument", () => {
   });
 });
 
+describe("bare prose paragraphs", () => {
+  it("wraps bare text in a paragraph with no problems", () => {
+    const inspection = inspectDocument(`Just some text`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(1);
+    expect(inspection.blocks[0]).toMatchObject({ type: "paragraph" });
+  });
+
+  it("splits paragraphs on a blank line", () => {
+    const inspection = inspectDocument(`First paragraph.\n\nSecond paragraph.`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks.map((block) => block.type)).toEqual(["paragraph", "paragraph"]);
+  });
+
+  it("treats several blank lines as one break", () => {
+    const inspection = inspectDocument(`First.\n\n\n\nSecond.`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(2);
+  });
+
+  it("keeps a single line break inside one paragraph", () => {
+    const inspection = inspectDocument(`line one\nline two`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(1);
+    expect(inspection.blocks[0].type).toBe("paragraph");
+  });
+
+  it("mixes bare paragraphs with custom blocks", () => {
+    const inspection = inspectDocument(
+      `Intro paragraph.\n\n<YouTube id="dQw4w9WgXcQ" />\n\nOutro paragraph.`
+    );
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks.map((block) => block.type)).toEqual([
+      "paragraph",
+      "youtube",
+      "paragraph",
+    ]);
+  });
+
+  it("keeps inline marks on the split paragraphs", () => {
+    const inspection = inspectDocument(`<Bold>First</Bold>\n\nSecond`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(2);
+    expect(inspection.blocks[0].children?.[0]).toMatchObject({ type: "text", marks: ["bold"] });
+  });
+});
+
 describe("the insertions the registry offers", () => {
   it("every Block's own snippet is a document with no problems", () => {
     const snippets = getAllBlocks().flatMap((block) => [

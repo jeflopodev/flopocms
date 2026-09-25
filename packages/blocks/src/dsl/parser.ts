@@ -301,13 +301,22 @@ export function inspectDocument(dslContent: string): DocumentInspection {
       if ("type" in node && node.type !== "text") {
         rootBlocks.push(node as BlockNode);
       } else if ("text" in node && (node as InlineSpan).text.trim()) {
-        // Bare inline text at the root wrapped automatically in a Paragraph block
-        rootBlocks.push({
-          id: generateNodeId("paragraph"),
-          type: "paragraph",
-          props: {},
-          children: [node],
-        });
+        // Bare prose at the root needs no <Paragraph> wrapper: a blank line
+        // starts a new paragraph, so authors type paragraphs separated by an
+        // empty line and drop custom blocks between them.
+        const inline = node as InlineSpan;
+        const chunks = inline.text
+          .split(/\r?\n[ \t]*\r?\n/)
+          .map((chunk) => chunk.trim())
+          .filter(Boolean);
+        for (const chunk of chunks) {
+          rootBlocks.push({
+            id: generateNodeId("paragraph"),
+            type: "paragraph",
+            props: {},
+            children: [{ ...inline, text: chunk }],
+          });
+        }
       }
     }
   }
