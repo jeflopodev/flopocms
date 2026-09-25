@@ -294,38 +294,61 @@ export function inspectDocument(dslContent: string): DocumentInspection {
   const activeMarks: Mark[] = [];
   const activeMarkDefs: MarkDef[] = [];
 
+  // Consecutive bare-text spans at the root belong to the same prose run:
+  // a mark tag splits the text into several tokens, but they stay one
+  // paragraph unless a blank line separates them. The run flushes into
+  // paragraphs when a block arrives or the document ends.
+  const pendingRootInlines: InlineSpan[] = [];
+
+  function flushPendingRootText(): void {
+    if (pendingRootInlines.length === 0) return;
+    const spans = pendingRootInlines.splice(0);
+    const paragraphs: InlineSpan[][] = [[]];
+    for (const span of spans) {
+      const parts = span.text.split(/(\r?\n[ \t]*\r?\n)/);
+      for (let i = 0; i < parts.length; i += 2) {
+        if (parts[i]) {
+          paragraphs[paragraphs.length - 1].push(parts.length === 1 ? span : { ...span, text: parts[i] });
+        }
+        if (i + 1 < parts.length) paragraphs.push([]);
+      }
+    }
+    for (const group of paragraphs) {
+      if (group.length > 0) {
+        group[0] = { ...group[0], text: group[0].text.replace(/^\s+/, "") };
+        const last = group.length - 1;
+        group[last] = { ...group[last], text: group[last].text.replace(/\s+$/, "") };
+      }
+      if (group.some((span) => span.text.trim())) {
+        rootBlocks.push({
+          id: generateNodeId("paragraph"),
+          type: "paragraph",
+          props: {},
+          children: group,
+        });
+      }
+    }
+  }
+
   function appendChild(node: BlockNode | InlineSpan): void {
     if (stack.length > 0) {
       stack[stack.length - 1].children.push(node);
-    } else {
-      if ("type" in node && node.type !== "text") {
-        rootBlocks.push(node as BlockNode);
-      } else if ("text" in node && (node as InlineSpan).text.trim()) {
-        // Bare prose at the root needs no <Paragraph> wrapper: a blank line
-        // starts a new paragraph, so authors type paragraphs separated by an
-        // empty line and drop custom blocks between them.
-        const inline = node as InlineSpan;
-        const chunks = inline.text
-          .split(/\r?\n[ \t]*\r?\n/)
-          .map((chunk) => chunk.trim())
-          .filter(Boolean);
-        for (const chunk of chunks) {
-          rootBlocks.push({
-            id: generateNodeId("paragraph"),
-            type: "paragraph",
-            props: {},
-            children: [{ ...inline, text: chunk }],
-          });
-        }
-      }
+    } else if ("type" in node && node.type !== "text") {
+      // A block ends the prose run before it, so bare text never leaks into it.
+      flushPendingRootText();
+      rootBlocks.push(node as BlockNode);
+    } else if ("text" in node) {
+      // Bare prose at the root needs no <Paragraph> wrapper: a blank line
+      // starts a new paragraph, so authors type paragraphs separated by an
+      // empty line and drop custom blocks between them. Whitespace-only spans
+      // ride along; the flush drops groups with no words.
+      pendingRootInlines.push(node as InlineSpan);
     }
   }
 
   for (const token of tokens) {
     if (token.type === "text") {
       if (!token.content) continue;
-      // If we are at root and text is only whitespace, ignore
-      if (stack.length === 0 && !token.content.trim()) continue;
 
       const span: InlineSpan = {
         type: "text",
@@ -485,6 +508,9 @@ export function inspectDocument(dslContent: string): DocumentInspection {
     };
     appendChild(node);
   }
+
+  // Trailing prose after the last block still belongs to a paragraph.
+  flushPendingRootText();
 
   // A closing block tag glued to text breaks the production build while the preview
   // renders it fine: Astro's MDX loader rejects `<Tag>\ntext</Tag>` (observed live —

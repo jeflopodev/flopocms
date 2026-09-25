@@ -145,6 +145,28 @@ describe("bare prose paragraphs", () => {
     expect(inspection.blocks).toHaveLength(2);
     expect(inspection.blocks[0].children?.[0]).toMatchObject({ type: "text", marks: ["bold"] });
   });
+
+  it("keeps marks inline within one paragraph", () => {
+    const inspection = inspectDocument(`A <Bold>bold</Bold> and <Italic>italic</Italic> word.`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(1);
+    expect(inspection.blocks[0].children).toMatchObject([
+      { type: "text", text: "A " },
+      { type: "text", text: "bold", marks: ["bold"] },
+      { type: "text", text: " and " },
+      { type: "text", text: "italic", marks: ["italic"] },
+      { type: "text", text: " word." },
+    ]);
+  });
+
+  it("keeps a link inline within one paragraph", () => {
+    const inspection = inspectDocument(`See <Link href="https://x">docs</Link> now.`);
+
+    expect(inspection.problems).toEqual([]);
+    expect(inspection.blocks).toHaveLength(1);
+    expect(inspection.blocks[0].children).toHaveLength(3);
+  });
 });
 
 describe("the insertions the registry offers", () => {
