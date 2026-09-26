@@ -199,6 +199,9 @@ importers:
       drizzle-orm:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260916.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.4)
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@22.20.3)
       slugify:
         specifier: ^1.6.9
         version: 1.6.9

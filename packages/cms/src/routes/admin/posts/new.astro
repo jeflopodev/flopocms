@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
 
-import { createServices } from "cms/lib/services";
-import { createDraftPost } from "cms/lib/post-lifecycle";
+import { createServices } from "../../../lib/services";
+import { createDraftPost } from "../../../lib/post-lifecycle";
 
 const user = Astro.locals.user;
 if (!user) {

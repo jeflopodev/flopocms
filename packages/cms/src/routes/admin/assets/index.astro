@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import AdminLayout from "cms/layouts/AdminLayout.astro";
-import { assetLibrarySummary } from "cms/lib/asset-library";
-import { createServices } from "cms/lib/services";
-import { type Asset } from "cms/lib/db";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { assetLibrarySummary } from "../../../lib/asset-library";
+import { createServices } from "../../../lib/services";
+import { type Asset } from "../../../lib/db";
 
 const services = createServices(Astro.locals);
 
@@ -64,6 +64,7 @@ const library = assetLibrarySummary(assets);
             <h3>Drag and drop files here, or <button type="button" id="browse-btn" class="browse-link-btn">browse files</button></h3>
             <p class="dropzone-limits">
               Supports <strong>Images</strong> (up to 2 MiB), <strong>Videos</strong>, <strong>PDFs</strong>, and <strong>ZIP archives</strong> (up to 25 MiB).
+              JPEG, PNG, BMP and TIFF originals are stored as WebP; AVIF passes through.
             </p>
           </div>
         </div>
@@ -231,8 +232,9 @@ const library = assetLibrarySummary(assets);
     type AssetSort,
     type AssetTypeFilter,
     type MediaKind,
-  } from "cms/lib/asset-library";
-  import { createUploadQueue, postAssetFile, type UploadItem } from "cms/lib/upload-queue";
+  } from "../../../lib/asset-library";
+  import { createUploadQueue, postAssetFile, type UploadItem } from "../../../lib/upload-queue";
+  import { convertRasterToWebp } from "../../../scripts/editor/image-to-webp";
 
   interface AssetData {
     id: string;
@@ -642,6 +644,7 @@ const library = assetLibrarySummary(assets);
   // what it looks like. The same module drives the editor's Asset Modal.
   const uploads = createUploadQueue({
     post: postAssetFile,
+    prepare: convertRasterToWebp,
     onChange: (items) => {
       collectUploaded(items);
       renderUploadQueue(items);

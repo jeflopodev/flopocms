@@ -1,9 +1,9 @@
 ---
 export const prerender = false;
 
-import AdminLayout from "cms/layouts/AdminLayout.astro";
-import { createServices } from "cms/lib/services";
-import type { PostRecord } from "cms/lib/post-store";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { createServices } from "../../../lib/services";
+import type { PostRecord } from "../../../lib/post-store";
 
 // The composition root: this page names no store and writes no query.
 const services = createServices(Astro.locals);

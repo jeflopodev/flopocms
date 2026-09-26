@@ -14,6 +14,7 @@ import { InMemoryPostStore, type PostRecord } from "./post-store";
 import { InMemoryMediaAdapter } from "./media-storage";
 import { createNoopArticleMirror, type ArticleMirror } from "./article-mirror";
 import type { AssetRegistry } from "./asset-registry";
+import type { ImageConverter } from "./image-conversion";
 import type { EditorAccounts } from "./editor-accounts";
 import { InMemoryIdempotencyStore } from "./idempotency-store";
 import { DEFAULT_CONTENT_DIR, DEFAULT_UPLOADS_DIR } from "./env";
@@ -78,6 +79,7 @@ function testServices(deps: TestDeps = {}): Services {
     media: new InMemoryMediaAdapter(),
     // None of these is reached from here; they are listed because the seam is typed as Services.
     assets: undefined as unknown as AssetRegistry,
+    images: undefined as unknown as ImageConverter,
     accounts: undefined as unknown as EditorAccounts,
     idempotency: new InMemoryIdempotencyStore(() => new Date(NOW)),
     contentDir: deps.contentDir ?? DEFAULT_CONTENT_DIR,

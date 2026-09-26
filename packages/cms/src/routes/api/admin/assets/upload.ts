@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute } from "cms/lib/admin-route";
+import { adminRoute } from "../../../../lib/admin-route";
 
 export const POST = adminRoute(async ({ request, services }) => {
   const formData = await request.formData();

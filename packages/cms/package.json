@@ -9,7 +9,8 @@
   },
   "bin": {
     "cms-project-view": "./scripts/project-published-view.mjs",
-    "cms-create-user": "./scripts/create-user.mjs"
+    "cms-create-user": "./scripts/create-user.mjs",
+    "cms-check-images": "./scripts/check-image-sizes.mjs"
   },
   "scripts": {
     "test": "vitest run",
@@ -23,6 +24,7 @@
     "blocks": "workspace:*",
     "codemirror": "^6.0.2",
     "drizzle-orm": "1.0.0-rc.4",
+    "sharp": "^0.35.4",
     "slugify": "^1.6.9",
     "valibot": "^1.5.0"
   },

@@ -6,14 +6,12 @@ import { owningBlockType } from "blocks/toolbar";
 import { inspectDocument } from "blocks/dsl/parser";
 
 /**
- * The Editor page that publishes the toolbar buttons. A monorepo-phase contract test:
- * the page is site-owned chrome, so this file moves to the site repo at repo-split and
- * reads its page by a same-package path again.
+ * The Editor page that publishes the toolbar buttons. A same-package contract test:
+ * the page moved into the CMS package with the admin UI (ADR-0016); at repo-split
+ * this file moves with it and reads its page by a same-package path again.
  */
 const editorPage = readFileSync(
-  fileURLToPath(
-    new URL("../../../../../sites/site-a/src/pages/admin/posts/[id].astro", import.meta.url)
-  ),
+  fileURLToPath(new URL("../../routes/admin/posts/[id].astro", import.meta.url)),
   "utf8"
 );
 

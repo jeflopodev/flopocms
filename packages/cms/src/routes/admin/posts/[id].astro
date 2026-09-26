@@ -1,15 +1,15 @@
 ---
 export const prerender = false;
 
-import { type Asset } from "cms/lib/db";
-import { createServices } from "cms/lib/services";
-import type { PostRecord } from "cms/lib/post-store";
-import { type LockResult } from "cms/lib/locks";
-import { templateOptions } from "cms/templates";
+import { type Asset } from "../../../lib/db";
+import { createServices } from "../../../lib/services";
+import type { PostRecord } from "../../../lib/post-store";
+import { type LockResult } from "../../../lib/locks";
+import { templateOptions } from "../../../templates";
 import { getEditorBlockCards } from "blocks/registry";
 import { TOOLBAR_GROUPS, getToolbarActions } from "blocks/toolbar";
-import "cms/styles/global.css";
-import "cms/styles/editor.css";
+import "../../../styles/global.css";
+import "../../../styles/editor.css";
 
 const editorCards = getEditorBlockCards();
 
@@ -552,7 +552,7 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
 
     <!-- Bootstrap Editor Client Module -->
     <script>
-      import { initEditor } from "cms/scripts/editor";
+      import { initEditor } from "../../../scripts/editor";
 
       const dataScript = document.getElementById("initial-post-data");
       const postData = JSON.parse(dataScript?.textContent || "{}");

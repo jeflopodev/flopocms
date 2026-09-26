@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
 
-import AdminLayout from "cms/layouts/AdminLayout.astro";
-import { createServices } from "cms/lib/services";
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { createServices } from "../../lib/services";
 
 const user = Astro.locals.user;
 if (!user) {

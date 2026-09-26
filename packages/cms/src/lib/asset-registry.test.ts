@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryAssetRegistry, sanitizeFilename } from "./asset-registry";
+import { InMemoryAssetRegistry, registerAsset, sanitizeFilename } from "./asset-registry";
+import { CONVERSION_UNAVAILABLE_ERROR } from "./image-conversion";
 import type { Asset } from "./db";
 
 describe("sanitizeFilename", () => {
@@ -57,11 +58,38 @@ describe("InMemoryAssetRegistry", () => {
     const result = await registry.upload(file);
     expect(result.success).toBe(true);
     expect(result.asset).toBeDefined();
-    expect(result.asset?.filename).toBe("photo.png");
-    expect(result.asset?.url).toBe("/uploads/photo.png");
+    // Raster originals are canonicalized: never stored as themselves.
+    expect(result.asset?.filename).toBe("photo.webp");
+    expect(result.asset?.mimeType).toBe("image/webp");
+    expect(result.asset?.url).toBe("/uploads/photo.webp");
+    // Provenance stays: the original name is what the editor picked.
+    expect(result.asset?.originalName).toBe("photo.png");
 
     const listed = await registry.list();
     expect(listed).toHaveLength(1);
+  });
+
+  it("passes AVIF through without canonicalization", async () => {
+    const registry = new InMemoryAssetRegistry();
+    const file = new File(["dummy content"], "hero.avif", { type: "image/avif" });
+
+    const result = await registry.upload(file);
+    expect(result.success).toBe(true);
+    expect(result.asset?.filename).toBe("hero.avif");
+    expect(result.asset?.mimeType).toBe("image/avif");
+  });
+
+  it("refuses a convertible raster when the converter cannot run", async () => {
+    const registry = new InMemoryAssetRegistry([], {
+      convertToWebp: async () => {
+        throw new Error("Image conversion is unavailable in this runtime.");
+      },
+    });
+    const file = new File(["dummy content"], "photo.jpg", { type: "image/jpeg" });
+
+    const result = await registry.upload(file);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("WebP or AVIF");
   });
 
   it("rejects an oversized image upload (> 2MB)", async () => {
@@ -104,5 +132,71 @@ describe("InMemoryAssetRegistry", () => {
     const res = await registry.delete("no-such-id");
     expect(res.success).toBe(false);
     expect(res.error).toBe("Asset not found");
+  });
+});
+
+describe("registerAsset raster→WebP canonicalization", () => {
+  const stubDb = () => ({ insert: () => ({ values: async () => {} }) }) as any;
+
+  const stubStorage = (seen: { filename?: string; mimeType?: string; size?: number }) => ({
+    writeMedia: async (file: { filename: string; content: Uint8Array; mimeType?: string }) => {
+      seen.filename = file.filename;
+      seen.mimeType = file.mimeType;
+      seen.size = file.content.length;
+      return { success: true, url: `/uploads/${file.filename}` };
+    },
+    deleteMedia: async () => ({ success: true }),
+  });
+
+  it("re-encodes a PNG to WebP bytes before storage", async () => {
+    const seen: { filename?: string; mimeType?: string; size?: number } = {};
+    const result = await registerAsset({
+      file: new File([new Uint8Array([1, 2, 3, 4])], "photo.png", { type: "image/png" }),
+      db: stubDb(),
+      storage: stubStorage(seen) as any,
+      images: {
+        convertToWebp: async ({ filename }) => ({
+          bytes: new Uint8Array([9, 9]),
+          filename: filename.replace(/\.png$/, ".webp"),
+          mimeType: "image/webp",
+        }),
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(seen.filename).toBe("photo.webp");
+    expect(seen.mimeType).toBe("image/webp");
+    expect(seen.size).toBe(2);
+    expect(result.asset?.filename).toBe("photo.webp");
+    expect(result.asset?.mimeType).toBe("image/webp");
+    expect(result.asset?.byteSize).toBe(2);
+    expect(result.asset?.originalName).toBe("photo.png");
+  });
+
+  it("refuses a convertible raster without a converter (Workers)", async () => {
+    const result = await registerAsset({
+      file: new File(["dummy"], "photo.jpg", { type: "image/jpeg" }),
+      db: stubDb(),
+      storage: stubStorage({}) as any,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("WebP or AVIF");
+  });
+
+  it("maps a converter outage to a send-WebP refusal, not a crash", async () => {
+    const result = await registerAsset({
+      file: new File(["dummy"], "scan.tiff", { type: "image/tiff" }),
+      db: stubDb(),
+      storage: stubStorage({}) as any,
+      images: {
+        convertToWebp: async () => {
+          throw new Error(CONVERSION_UNAVAILABLE_ERROR);
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("WebP or AVIF");
   });
 });

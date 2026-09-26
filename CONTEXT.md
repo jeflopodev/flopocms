@@ -95,7 +95,7 @@ _Avoid_: Snippet, markdown template, embed code
 ### Assets
 
 **Asset Rules**:
-The dependency-free module (`src/lib/asset-rules.ts`) that decides what counts as an image and whether a file may be uploaded (`2 MB` images, `25 MB` anything else). Both the Worker and the browser import it, so the verdict is written once rather than per call site.
+The dependency-free module (`src/lib/asset-rules.ts`) that decides what counts as an image and whether a file may be uploaded (`2 MB` images, `25 MB` anything else). Raster originals (JPEG, PNG, BMP, TIFF) are stored as WebP; AVIF passes through. Both the Worker and the browser import it, so the verdict is written once rather than per call site.
 _Avoid_: Validation utils, upload constants
 
 **Asset Registry**:

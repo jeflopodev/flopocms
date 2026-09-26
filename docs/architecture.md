@@ -231,7 +231,7 @@ Behind the read model sit two distinct adapters:
 
 ## 4. Administrative Client Architecture
 
-The admin editor (`/admin/posts/[id].astro`) provides an interactive editorial experience using CodeMirror 6 with modular client-side components:
+The admin editor route (`/admin/posts/[id]`, served from the CMS package) provides an interactive editorial experience using CodeMirror 6 with modular client-side components:
 
 ```
 src/scripts/editor/
@@ -282,41 +282,46 @@ src/scripts/editor/
 │   │   ├── src/registry.ts       # The only hardcoded block list (removal contract)
 │   │   ├── src/toolbar.ts        # Marks plus registered entries, ordered
 │   │   └── src/asset-rules.ts    # Dependency-free upload validation
-│   └── cms/                      # Versioned CMS: everything sites share, zero real content
-│       ├── src/lib/              # Core domain modules, seams, and adapters
-│       │   ├── article-display.ts# What an Article becomes per mode (published / preview)
-│       │   ├── article-projection.ts # Article (main) → editorial record
-│       │   ├── post-lifecycle.ts # Deep module managing all post state transitions
-│       │   ├── github-contents.ts# GitHub REST API adapter (atomic commits, CAS)
-│       │   ├── idempotency-store.ts # Idempotent save replay
-│       │   └── services.ts       # Services seam resolving adapters at the edge
-│       ├── src/db/schema.ts      # Drizzle D1 database schema
+  │   └── cms/                      # Versioned CMS: everything sites share, zero real content
+  │       ├── src/lib/              # Core domain modules, seams, and adapters
+  │       │   ├── article-display.ts# What an Article becomes per mode (published / preview)
+  │       │   ├── article-projection.ts # Article (main) → editorial record
+  │       │   ├── post-lifecycle.ts # Deep module managing all post state transitions
+  │       │   ├── github-contents.ts# GitHub REST API adapter (atomic commits, CAS)
+  │       │   ├── idempotency-store.ts # Idempotent save replay
+  │       │   └── services.ts       # Services seam resolving adapters at the edge
+  │       ├── src/routes/           # Injected admin pages + /api/admin/* (cmsAdmin injectRoute)
+  │       ├── src/integration.ts    # cmsAdmin(): injects the admin routes into each site
+  │       ├── src/middleware.ts     # Edge auth guard (sites delegate their hook here)
+  │       ├── src/db/schema.ts      # Drizzle D1 database schema
 │       ├── src/templates/        # Post presentation templates (default, two-column)
-│       ├── src/layouts/AdminLayout.astro # Admin shell (site chrome stays in sites)
-│       ├── src/components/article-fragment.astro # The Article, without any page
+  │       ├── src/layouts/AdminLayout.astro # Authenticated admin shell (login renders in site chrome)
+  │       ├── src/components/article-fragment.astro # The Article, without any page
 │       ├── src/scripts/editor/   # Browser-side CodeMirror and UI controllers
 │       ├── src/content.ts        # defineBlogCollection factory (sites name authors)
 │       ├── migrations/           # D1 database SQL migrations (sites point at these)
 │       └── scripts/              # cms-project-view, cms-create-user bins
-└── sites/
-    └── site-a/                   # Thin site shell: content, chrome, config, deploys
-        ├── astro.config.mjs      # Astro configuration (Cloudflare adapter + MDX loader)
-        ├── wrangler.jsonc        # Worker, D1 binding, migrations_dir into packages/cms
-        ├── src/content/blog/     # Published Post Bundles (git is truth per site)
-        ├── public/uploads/       # Published asset bytes (git is truth per site)
-        ├── src/pages/            # Site + admin routes (admin converts to injectRoute later)
-        ├── src/layouts/root-layout.astro # Site page shell (header/footer/consts)
-        ├── src/middleware.ts     # Delegates auth to cms/lib/services
-        └── src/content.config.ts # Delegates to defineBlogCollection with site authors
-```
-
-Sites import `cms/*` and `blocks/*`; neither package imports sites, and `blocks/*`
-imports nothing outside itself (the CMS satisfies its structural article-source
-interface). Removing a block is deleting its directory plus its manifest lines:
-drawer cards, toolbar buttons, validation, rendering, styles, and JSON-LD follow,
-and content still using its tag is refused at save naming it. Admin pages stay in
-the site physically (Astro requires `src/pages`) and convert to `injectRoute`
-entrypoints at repo-split; the toolbar contract test documents the move.
+  └── sites/
+  │     └── site-a/                   # Thin site shell: content, chrome, config, deploys
+  │         ├── astro.config.mjs      # Astro configuration (Cloudflare adapter + MDX loader + cmsAdmin)
+  │         ├── wrangler.jsonc        # Worker, D1 binding, migrations_dir into packages/cms
+  │         ├── src/content/blog/     # Published Post Bundles (git is truth per site)
+  │         ├── public/uploads/       # Published asset bytes (git is truth per site)
+  │         ├── src/pages/            # Site pages + login + draft preview (the rest comes from cmsAdmin)
+  │         ├── src/layouts/root-layout.astro # Site page shell (header/footer/consts)
+  │         ├── src/middleware.ts     # Delegates auth to cms/middleware
+  │         └── src/content.config.ts # Delegates to defineBlogCollection with site authors
+  ```
+  
+  Sites import `cms/*` and `blocks/*`; neither package imports sites, and `blocks/*`
+  imports nothing outside itself (the CMS satisfies its structural article-source
+  interface). Removing a block is deleting its directory plus its manifest lines:
+  drawer cards, toolbar buttons, validation, rendering, styles, and JSON-LD follow,
+  and content still using its tag is refused at save naming it. Admin pages and API
+  routes live in `packages/cms/src/routes/` and reach each site through the
+  `cmsAdmin()` integration's `injectRoute`; login and the draft preview stay site-owned files
+  because both compose the site's own page shell (ADR-0016). The toolbar contract test
+  reads the editor page from its CMS path and moves with it at repo-split.
 
 ---
 

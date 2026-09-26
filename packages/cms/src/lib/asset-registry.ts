@@ -1,13 +1,20 @@
 import { desc, eq } from "drizzle-orm";
-import { sizeVerdictFor } from "blocks/asset-rules";
+import { WEBP_MIME, isConvertibleRaster, sizeVerdictFor, webpFilenameFor } from "blocks/asset-rules";
 import type { DbClient } from "./db";
 import { assets, type Asset } from "./db";
+import {
+  isConversionUnavailable,
+  needsWebpConversion,
+  type ImageConverter,
+} from "./image-conversion";
 import type { MediaStorage } from "./media-storage";
 
 export interface RegisterAssetOptions {
   file: File;
   db: DbClient;
   storage: MediaStorage;
+  /** Server-side raster→WebP retry. Absent means: refuse convertibles, send WebP. */
+  images?: ImageConverter;
 }
 
 export interface RegisterAssetResult {
@@ -52,33 +59,72 @@ export function sanitizeFilename(originalName: string): { cleanFilename: string;
 
 /**
  * Registers an uploaded file in the Asset Registry:
- * Validates constraints, writes bytes to MediaStorage, and creates the D1 asset record.
+ * Validates constraints, canonicalizes raster originals to WebP, writes bytes
+ * to MediaStorage, and creates the D1 asset record.
+ *
+ * Convertible rasters (JPEG/PNG/BMP/TIFF) never reach storage as themselves:
+ * the browser pre-encodes before spending a request and this function is the
+ * retry after receiving one. Without an `images` converter (Workers, where
+ * `sharp` cannot run) they are refused with a send-WebP message; with one
+ * (Node dev) they are re-encoded and stored as `.webp`.
  */
 export async function registerAsset(options: RegisterAssetOptions): Promise<RegisterAssetResult> {
-  const { file, db, storage } = options;
+  const { file, db, storage, images } = options;
 
   if (!file) {
     return { success: false, error: "No file provided" };
   }
 
-  // The same verdict the browser shows before it spends a request.
-  const verdict = sizeVerdictFor({ mimeType: file.type, byteSize: file.size, filename: file.name });
+  // Canonicalize before the verdict: a 2.4 MB PNG can become a 300 KB WebP.
+  let effectiveName = file.name || "upload.bin";
+  let effectiveType = file.type;
+  let effectiveBytes: Uint8Array | Buffer | null = null;
+
+  if (needsWebpConversion({ mimeType: file.type, filename: file.name })) {
+    if (!images) {
+      return {
+        success: false,
+        error: `Image "${file.name}" must be uploaded as WebP or AVIF. Convert it before uploading.`,
+      };
+    }
+    try {
+      const raw = Buffer.from(await file.arrayBuffer());
+      const converted = await images.convertToWebp({ bytes: raw, filename: file.name });
+      effectiveName = converted.filename;
+      effectiveType = converted.mimeType;
+      effectiveBytes = Buffer.from(converted.bytes);
+    } catch (err: any) {
+      const message = err?.message || "";
+      if (isConversionUnavailable(message)) {
+        return {
+          success: false,
+          error: `Image "${file.name}" must be uploaded as WebP or AVIF. Convert it before uploading.`,
+        };
+      }
+      return { success: false, error: `Could not convert "${file.name}" to WebP: ${message}` };
+    }
+  }
+
+  const effectiveSize = effectiveBytes ? effectiveBytes.length : file.size;
+
+  // The same verdict the browser shows before it spends a request, now on the
+  // canonical bytes: a converted WebP is judged as a WebP.
+  const verdict = sizeVerdictFor({ mimeType: effectiveType, byteSize: effectiveSize, filename: effectiveName });
   if (!verdict.ok) {
     return { success: false, error: verdict.reason };
   }
 
   const originalName = file.name || "upload.bin";
-  const { cleanFilename, baseName } = sanitizeFilename(originalName);
+  const { cleanFilename, baseName } = sanitizeFilename(effectiveName);
   const fallbackTitle = baseName.replace(/-/g, " ");
 
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const buffer = effectiveBytes ? Buffer.from(effectiveBytes) : Buffer.from(await file.arrayBuffer());
 
   // 1. Write to storage seam
   const storageResult = await storage.writeMedia({
     filename: cleanFilename,
     content: buffer,
-    mimeType: file.type,
+    mimeType: effectiveType,
   });
 
   if (!storageResult.success) {
@@ -94,8 +140,8 @@ export async function registerAsset(options: RegisterAssetOptions): Promise<Regi
     id: assetId,
     filename: cleanFilename,
     originalName,
-    mimeType: file.type || "application/octet-stream",
-    byteSize: file.size,
+    mimeType: effectiveType || "application/octet-stream",
+    byteSize: effectiveSize,
     url,
     title: fallbackTitle,
     altText: fallbackTitle,
@@ -187,9 +233,13 @@ export interface AssetRegistry {
 /**
  * Production adapter: coordinates D1 database records with MediaStorage bytes.
  */
-export function createD1AssetRegistry(db: DbClient, storage: MediaStorage): AssetRegistry {
+export function createD1AssetRegistry(
+  db: DbClient,
+  storage: MediaStorage,
+  images?: ImageConverter
+): AssetRegistry {
   return {
-    upload: (file: File) => registerAsset({ file, db, storage }),
+    upload: (file: File) => registerAsset({ file, db, storage, images }),
     delete: (id: string) => deleteAsset({ id, db, storage }),
     updateMetadata: (options: UpdateAssetMetadataOptions) => updateAssetMetadata(db, options),
     list: () => listAssets(db),
@@ -202,22 +252,57 @@ export function createD1AssetRegistry(db: DbClient, storage: MediaStorage): Asse
 
 /**
  * In-memory substitute for tests, avoiding SQLite/D1 and file system dependencies.
+ *
+ * Convertible rasters are canonicalized by name and type (never stored as
+ * themselves) without re-encoding bytes: byte re-encoding is a server-runtime
+ * concern, exercised against `registerAsset` with a fake converter. Pass an
+ * `images` converter to also exercise the refusal path.
  */
 export class InMemoryAssetRegistry implements AssetRegistry {
   private items = new Map<string, Asset>();
 
-  constructor(seed: Asset[] = []) {
+  constructor(
+    seed: Asset[] = [],
+    private images?: ImageConverter
+  ) {
     for (const a of seed) this.items.set(a.id, a);
   }
 
   async upload(file: File): Promise<RegisterAssetResult> {
     if (!file) return { success: false, error: "No file provided" };
 
-    const verdict = sizeVerdictFor({ mimeType: file.type, byteSize: file.size, filename: file.name });
+    let effectiveName = file.name || "upload.bin";
+    let effectiveType = file.type;
+
+    if (isConvertibleRaster({ mimeType: file.type, filename: file.name })) {
+      if (this.images) {
+        try {
+          const raw = Buffer.from(await file.arrayBuffer());
+          const converted = await this.images.convertToWebp({ bytes: raw, filename: file.name });
+          effectiveName = converted.filename;
+          effectiveType = converted.mimeType;
+        } catch (err: any) {
+          const message = err?.message || err;
+          return {
+            success: false,
+            error:
+              isConversionUnavailable(String(message)) ?
+                `Image "${file.name}" must be uploaded as WebP or AVIF. Convert it before uploading.`
+              : `Could not convert "${file.name}" to WebP: ${message}`,
+          };
+        }
+      } else {
+        // No byte work in the substitute: the name and type move, the size stays.
+        effectiveName = webpFilenameFor(file.name);
+        effectiveType = WEBP_MIME;
+      }
+    }
+
+    const verdict = sizeVerdictFor({ mimeType: effectiveType, byteSize: file.size, filename: effectiveName });
     if (!verdict.ok) return { success: false, error: verdict.reason };
 
     const originalName = file.name || "upload.bin";
-    const { cleanFilename, baseName } = sanitizeFilename(originalName);
+    const { cleanFilename, baseName } = sanitizeFilename(effectiveName);
     const fallbackTitle = baseName.replace(/-/g, " ");
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -226,7 +311,7 @@ export class InMemoryAssetRegistry implements AssetRegistry {
       id,
       filename: cleanFilename,
       originalName,
-      mimeType: file.type || "application/octet-stream",
+      mimeType: effectiveType || "application/octet-stream",
       byteSize: file.size,
       url: `/uploads/${cleanFilename}`,
       title: fallbackTitle,

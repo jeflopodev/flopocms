@@ -11,6 +11,7 @@ import {
   type UploadItem,
   type UploadedAsset,
 } from "../../lib/upload-queue";
+import { convertRasterToWebp } from "./image-to-webp";
 
 export interface AssetPickerModalOptions {
   initialAssets: AssetSummary[];
@@ -54,6 +55,7 @@ export class AssetPickerModal {
   /** Files dropped into the modal, through the same upload queue the Asset Library uses. */
   private uploads = createUploadQueue({
     post: postAssetFile,
+    prepare: convertRasterToWebp,
     onChange: (items) => this.onUploadChange(items),
   });
   private insertedUploads = new Set<string>();

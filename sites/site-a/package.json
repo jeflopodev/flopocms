@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/check-image-sizes.mjs && astro build",
+    "build": "cms-check-images && astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check:images": "node scripts/check-image-sizes.mjs",
+    "check:images": "cms-check-images",
     "review:project": "cms-project-view",
     "create-user": "cms-create-user",
     "d1:migrate": "wrangler d1 migrations apply DB",

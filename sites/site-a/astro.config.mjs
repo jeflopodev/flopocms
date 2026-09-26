@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 import mdx from '@astrojs/mdx';
+import { cmsAdmin } from 'cms/integration';
 
 // `mdx()` stays, and only as a loader: the content collection reads Article bodies from
 // `.mdx` bundles and nothing renders through it. ADR-0010 replaced component-based rendering
@@ -14,5 +15,5 @@ export default defineConfig({
   adapter: cloudflare({
     imageService: 'compile',
   }),
-  integrations: [mdx()],
+  integrations: [mdx(), cmsAdmin()],
 });

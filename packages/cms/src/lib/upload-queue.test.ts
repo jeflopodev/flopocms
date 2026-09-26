@@ -130,4 +130,40 @@ describe("Upload Queue", () => {
 
     expect(queue.items().map((i) => i.filename)).toEqual(["b.png"]);
   });
+
+  it("runs prepare before the verdict, so a converted file is judged as itself", async () => {
+    const seen: string[] = [];
+    const queue = createUploadQueue({
+      post: async (f) => {
+        seen.push(`${f.name}:${f.type}`);
+        return { success: true, asset: assetFrom(f) };
+      },
+      prepare: async (f) => new File([f], "photo.webp", { type: "image/webp" }) as unknown as File,
+    });
+
+    queue.enqueue([file("photo.png", 100)]);
+    await queue.settled();
+
+    expect(seen).toEqual(["photo.webp:image/webp"]);
+    expect(queue.items()[0]).toMatchObject({ status: "done", filename: "photo.webp" });
+  });
+
+  it("keeps the original when prepare throws; the server retries", async () => {
+    const seen: string[] = [];
+    const queue = createUploadQueue({
+      post: async (f) => {
+        seen.push(f.name);
+        return { success: true, asset: assetFrom(f) };
+      },
+      prepare: async () => {
+        throw new Error("canvas unavailable");
+      },
+    });
+
+    queue.enqueue([file("photo.png", 100)]);
+    await queue.settled();
+
+    expect(seen).toEqual(["photo.png"]);
+    expect(queue.items()[0].status).toBe("done");
+  });
 });

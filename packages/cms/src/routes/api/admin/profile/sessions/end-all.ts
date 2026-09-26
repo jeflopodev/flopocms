@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute } from "cms/lib/admin-route";
+import { adminRoute } from "../../../../../lib/admin-route";
 
 /** Signs the Editor out everywhere: every session ends, including this one. */
 export const POST = adminRoute(async ({ user, services, cookies }) => {

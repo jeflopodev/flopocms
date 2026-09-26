@@ -48,6 +48,12 @@ export interface UploadQueueOptions {
   post: (file: File) => Promise<UploadOutcome>;
   /** Called after every change, with the whole queue. */
   onChange?: (items: readonly UploadItem[]) => void;
+  /**
+   * Pre-send transform, run once per file before the size verdict and the POST.
+   * The browser passes its raster→WebP encoder; the default is the identity.
+   * A throw keeps the original file: the server is the retry.
+   */
+  prepare?: (file: File) => Promise<File>;
 }
 
 export interface UploadQueue {
@@ -89,33 +95,47 @@ export function createUploadQueue(options: UploadQueueOptions): UploadQueue {
     notify();
   }
 
-  /** One at a time, in order: a queue that finishes out of order is unreadable. */
-  function queue(item: UploadItem): Promise<void> {
-    running = running.then(() => upload(item));
-    return running;
-  }
-
   return {
     enqueue(files) {
       for (const file of files) {
-        const verdict = sizeVerdictFor({
-          mimeType: file.type,
-          byteSize: file.size,
-          filename: file.name,
-        });
-
         const item: UploadItem = {
           id: `upload-${++counter}`,
           file,
           filename: file.name,
           byteSize: file.size,
           mimeType: file.type,
-          status: verdict.ok ? "queued" : "rejected",
-          error: verdict.reason,
+          status: "queued",
         };
 
         items.push(item);
-        if (verdict.ok) queue(item);
+        // Prepare, then judge, then send — one at a time, in order. The verdict
+        // reads the prepared file so a PNG that becomes a small WebP is judged
+        // as the WebP the server will actually store.
+        running = running.then(async () => {
+          try {
+            const prepared = options.prepare ? await options.prepare(item.file) : item.file;
+            item.file = prepared;
+            item.filename = prepared.name;
+            item.byteSize = prepared.size;
+            item.mimeType = prepared.type;
+          } catch {
+            // Keep the original: the server retries or refuses with its own reason.
+          }
+
+          const verdict = sizeVerdictFor({
+            mimeType: item.file.type,
+            byteSize: item.file.size,
+            filename: item.file.name,
+          });
+          if (!verdict.ok) {
+            item.status = "rejected";
+            item.error = verdict.reason;
+            notify();
+            return;
+          }
+
+          await upload(item);
+        });
       }
       notify();
     },
@@ -123,7 +143,8 @@ export function createUploadQueue(options: UploadQueueOptions): UploadQueue {
     async retry(id) {
       const item = items.find((candidate) => candidate.id === id);
       if (!item || item.status === "done" || item.status === "rejected") return;
-      await queue(item);
+      running = running.then(() => upload(item));
+      await running;
     },
 
     dismiss(id) {

@@ -7,6 +7,7 @@ import { createD1LockStore, type LockStore } from "./locks";
 import { systemClock, type Clock } from "./clock";
 import { createD1PostStore, type PostStore } from "./post-store";
 import { createD1AssetRegistry, type AssetRegistry } from "./asset-registry";
+import { RuntimeImageConverter, type ImageConverter } from "./image-conversion";
 import { createLocalArticleMirror, type ArticleMirror } from "./article-mirror";
 import { createD1EditorAccounts, type EditorAccounts } from "./editor-accounts";
 import { createD1IdempotencyStore, type IdempotencyStore } from "./idempotency-store";
@@ -35,6 +36,8 @@ export interface Services {
   media: MediaStorage;
   /** Media assets and upload metadata. */
   assets: AssetRegistry;
+  /** Server-side raster→WebP retry (sharp on Node, refusal on Workers). */
+  images: ImageConverter;
   /** Who the caller is: credentials and sessions. */
   accounts: EditorAccounts;
   /** Idempotent save replay, keyed by client `Idempotency-Key`. */
@@ -60,6 +63,7 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
   const contentDir = overrides.contentDir ?? getContentDir(locals);
   const uploadsDir = overrides.uploadsDir ?? getUploadsDir(locals);
   const media = overrides.media ?? getMediaStorage(contents, uploadsDir);
+  const images = overrides.images ?? new RuntimeImageConverter();
 
   return {
     db,
@@ -68,7 +72,8 @@ export function createServices(locals?: App.Locals, overrides: Partial<Services>
     mirror: overrides.mirror ?? createLocalArticleMirror(),
     contents,
     media,
-    assets: overrides.assets ?? createD1AssetRegistry(db, media),
+    assets: overrides.assets ?? createD1AssetRegistry(db, media, images),
+    images,
     accounts: overrides.accounts ?? createD1EditorAccounts(db, clock),
     idempotency: overrides.idempotency ?? createD1IdempotencyStore(db, clock),
     contentDir,
