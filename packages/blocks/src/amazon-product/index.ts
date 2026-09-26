@@ -67,7 +67,7 @@ export const amazonProductBlock: BlockDefinition<AmazonProductProps> = {
 
     return productSchema;
   },
-  render: (props) => {
+  render: (props, _childrenHtml, _data, _ctx, h) => {
     const title = props.title || "Amazon Product";
     const price = props.price ? String(props.price) : "";
     const currency = props.currencySymbol || "$";
@@ -78,13 +78,13 @@ export const amazonProductBlock: BlockDefinition<AmazonProductProps> = {
     const stretch = props.stretch || "default";
     const rating = props.rating ? Number(props.rating) : null;
 
-    return `<div class="amazon-preview-box" data-stretch="${stretch}">
-      ${image ? `<img src="${image}" alt="${title}" class="amazon-preview-img" loading="lazy" />` : ""}
+    return `<div class="amazon-preview-box" data-stretch="${h.attr(stretch)}">
+      ${image ? `<img src="${h.attr(image)}" alt="${h.attr(title)}" class="amazon-preview-img" loading="lazy" />` : ""}
       <div class="amazon-preview-info">
-        <h4 class="amazon-preview-title">${title}</h4>
-        ${rating ? `<div class="amazon-preview-rating">★ ${rating.toFixed(1)} / 5</div>` : ""}
-        ${price ? `<div class="amazon-preview-price">${price.startsWith("$") || price.startsWith("€") ? price : `${currency}${price}`}</div>` : ""}
-        <a href="${amazonUrl}" target="_blank" rel="noopener noreferrer nofollow" class="amazon-preview-btn">${ctaText}</a>
+        <h4 class="amazon-preview-title">${h.text(title)}</h4>
+        ${rating ? `<div class="amazon-preview-rating">★ ${h.text(rating.toFixed(1))} / 5</div>` : ""}
+        ${price ? `<div class="amazon-preview-price">${h.text(price.startsWith("$") || price.startsWith("€") ? price : `${currency}${price}`)}</div>` : ""}
+        <a href="${h.attr(amazonUrl)}" target="_blank" rel="noopener noreferrer nofollow" class="amazon-preview-btn">${h.text(ctaText)}</a>
       </div>
     </div>`;
   },

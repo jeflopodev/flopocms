@@ -11,15 +11,6 @@ export const codeBlockSchema = v.object({
 
 export type CodeBlockProps = v.InferOutput<typeof codeBlockSchema>;
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 export const codeBlock: BlockDefinition<CodeBlockProps> = {
   type: "code",
   tagName: "CodeBlock",
@@ -39,18 +30,18 @@ export const codeBlock: BlockDefinition<CodeBlockProps> = {
       order: 120,
     } satisfies ToolbarAction,
   ],
-  render: (props, childrenHtml) => {
+  render: (props, childrenHtml, _data, _ctx, h) => {
     const rawContent = props.code || childrenHtml || "";
     // Clean child HTML tags if any were rendered
     const textContent = rawContent.replace(/<[^>]+>/g, "");
-    const escaped = escapeHtml(textContent.trim());
+    const escaped = h.text(textContent.trim());
     const headerHtml = props.title
-      ? `<div class="code-block-header"><span class="code-block-title">${escapeHtml(props.title)}</span><span class="code-block-lang">${props.lang || ""}</span></div>`
+      ? `<div class="code-block-header"><span class="code-block-title">${h.text(props.title)}</span><span class="code-block-lang">${h.text(props.lang || "")}</span></div>`
       : "";
 
     return `<div class="code-block-wrapper">
       ${headerHtml}
-      <pre class="prose-pre" data-lang="${props.lang || ""}"><code class="language-${props.lang || ""}">${escaped}</code></pre>
+      <pre class="prose-pre" data-lang="${h.attr(props.lang || "")}"><code class="language-${h.attr(props.lang || "")}">${escaped}</code></pre>
     </div>`;
   },
   styles: `

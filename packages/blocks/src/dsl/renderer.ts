@@ -1,4 +1,4 @@
-import type { BlockNode, BlockRenderContext, InlineSpan } from "../types";
+import type { BlockNode, BlockRenderContext, HtmlEscaper, InlineSpan, RawHtml } from "../types";
 import { parseDslToBlocks } from "./parser";
 import { getBlock, getCombinedBlockStyles } from "../registry";
 
@@ -12,18 +12,37 @@ export interface RenderDocumentResult {
   styles: string;
 }
 
-function escapeHtml(text: string): string {
-  return text
+function escapeValue(value: unknown): string {
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * The one escaper. Positions are declared by blocks and decided here:
+ * `attr` and `text` escape, `raw` passes renderer-built markup through.
+ * It is constructed here — never imported by blocks, which receive it as
+ * the trailing `render` argument — and exported for direct `render` callers
+ * such as tests.
+ */
+export const htmlEscaper: HtmlEscaper = {
+  attr: (value) => escapeValue(value),
+  text: (value) => escapeValue(value),
+  raw: (html) => html as string,
+};
+
+function rawHtml(html: string): RawHtml {
+  return html as RawHtml;
 }
 
 /** The `download` attribute of a link: absent, bare, or naming the file. */
 function formatDownloadAttr(value: unknown): string {
   if (value === undefined || value === null || value === false || value === "") return "";
   if (value === true) return " download";
-  return ` download="${escapeHtml(String(value))}"`;
+  return ` download="${htmlEscaper.attr(value)}"`;
 }
 
 function renderInlineSpans(
@@ -37,7 +56,7 @@ function renderInlineSpans(
         return renderBlockNodeSync(child as BlockNode, serverDataMap, ctx);
       }
       const inline = child as InlineSpan;
-      let text = escapeHtml(inline.text || "");
+      let text = htmlEscaper.text(inline.text || "");
       const marks = inline.marks || [];
       const markDefs = inline.markDefs || [];
 
@@ -51,9 +70,9 @@ function renderInlineSpans(
 
       for (const def of markDefs) {
         if (def.type === "link") {
-          const href = escapeHtml(def.attrs?.href || "#");
-          const target = def.attrs?.target ? ` target="${escapeHtml(String(def.attrs.target))}"` : "";
-          const rel = def.attrs?.rel ? ` rel="${escapeHtml(String(def.attrs.rel))}"` : "";
+          const href = htmlEscaper.attr(def.attrs?.href || "#");
+          const target = def.attrs?.target ? ` target="${htmlEscaper.attr(def.attrs.target)}"` : "";
+          const rel = def.attrs?.rel ? ` rel="${htmlEscaper.attr(def.attrs.rel)}"` : "";
           const download = formatDownloadAttr(def.attrs?.download);
           text = `<a href="${href}"${target}${rel}${download} class="prose-link">${text}</a>`;
         }
@@ -79,14 +98,14 @@ function renderBlockNodeSync(node: BlockNode, serverDataMap: Map<string, any>, c
           if ("type" in c && c.type !== "text") {
             return renderBlockNodeSync(c as BlockNode, serverDataMap, ctx);
           }
-          return escapeHtml((c as InlineSpan).text || "");
+          return htmlEscaper.text((c as InlineSpan).text || "");
         })
         .join("\n");
     }
   }
 
   if (blockDef?.render) {
-    return blockDef.render(node.props, childrenHtml, data, ctx);
+    return blockDef.render(node.props, rawHtml(childrenHtml), data, ctx, htmlEscaper);
   }
 
   // Fallback generic container
@@ -95,19 +114,40 @@ function renderBlockNodeSync(node: BlockNode, serverDataMap: Map<string, any>, c
 
 /**
  * Traverses a block tree recursively to collect promises for loadServerData.
+ *
+ * Blocks render to static HTML, but a block may fetch dynamic data first
+ * (e.g. RelatedPosts reading other articles through `ctx.articles`). Identical
+ * requests within one document share a single fetch — no timeouts, a slow
+ * store simply delays the render.
  */
 async function loadAllServerData(
   nodes: BlockNode[],
   ctx: BlockRenderContext,
   map: Map<string, any>
 ): Promise<void> {
+  const inFlight = new Map<string, Promise<any>>();
   const tasks: Promise<void>[] = [];
+
+  const stableKey = (value: unknown): string => {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableKey).join(",")}]`;
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, val]) => `${JSON.stringify(key)}:${stableKey(val)}`);
+    return `{${entries.join(",")}}`;
+  };
 
   function traverse(node: BlockNode) {
     const blockDef = getBlock(node.type);
     if (blockDef?.loadServerData) {
+      const key = `${node.type}:${stableKey(node.props)}`;
+      let pending = inFlight.get(key);
+      if (!pending) {
+        pending = blockDef.loadServerData(node.props, ctx);
+        inFlight.set(key, pending);
+      }
       tasks.push(
-        blockDef.loadServerData(node.props, ctx).then((res) => {
+        pending.then((res) => {
           map.set(node.id, res);
         })
       );
@@ -127,9 +167,24 @@ async function loadAllServerData(
 
 /**
  * Collects all JSON-LD entities generated by blocks in the document.
+ *
+ * The document emits a single `@graph`: every block synthesizes its entities
+ * from its own props (and fetched data), so no manual schema block is needed.
+ * Entities without a string `@type` are dropped, and duplicate `@id`s keep
+ * their first occurrence, keeping the graph valid.
  */
 function collectJsonLdEntities(nodes: BlockNode[], map: Map<string, any>): any[] {
   const entities: any[] = [];
+  const seenIds = new Set<string>();
+
+  const pushEntity = (entity: any) => {
+    if (!entity || typeof entity !== "object" || typeof entity["@type"] !== "string") return;
+    if (typeof entity["@id"] === "string") {
+      if (seenIds.has(entity["@id"])) return;
+      seenIds.add(entity["@id"]);
+    }
+    entities.push(entity);
+  };
 
   function traverse(node: BlockNode) {
     const blockDef = getBlock(node.type);
@@ -137,8 +192,8 @@ function collectJsonLdEntities(nodes: BlockNode[], map: Map<string, any>): any[]
       const data = map.get(node.id);
       const res = blockDef.generateJsonLd(node.props, data);
       if (res) {
-        if (Array.isArray(res)) entities.push(...res);
-        else entities.push(res);
+        if (Array.isArray(res)) res.forEach(pushEntity);
+        else pushEntity(res);
       }
     }
     if (node.children) {

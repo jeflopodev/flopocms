@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import type { BlockNode, InlineSpan, Mark, MarkDef } from "../types";
 import { getBlock, isRegisteredTag } from "../registry";
-import { MARK_TAG_ALIASES } from "../marks";
+import { MARK_TAG_ALIASES } from "./marks";
 
 interface TokenTag {
   type: "open" | "close" | "selfClosing";
@@ -224,6 +224,21 @@ interface OpenElement {
   children: (BlockNode | InlineSpan)[];
 }
 
+/** Trims formatting whitespace off the edges of inline-only children.
+ *
+ * The serializer pads inline content onto its own lines, so the parser meets
+ * its own output with leading/trailing newlines it must not keep as content.
+ * Interior whitespace is untouched; marked spans trim exactly like the root
+ * prose flush already does for bare paragraphs.
+ */
+function trimInlineEdges(children: (BlockNode | InlineSpan)[]): void {
+  if (children.length === 0 || !children.every((c) => c.type === "text")) return;
+  const spans = children as InlineSpan[];
+  spans[0] = { ...spans[0], text: spans[0].text.replace(/^\s+/, "") };
+  const last = spans.length - 1;
+  spans[last] = { ...spans[last], text: spans[last].text.replace(/\s+$/, "") };
+}
+
 /** Names the props that did not match, so a message says which one to fix. */
 function describeIssues(issues: readonly v.BaseIssue<unknown>[]): string {
   return issues
@@ -332,6 +347,13 @@ export function inspectDocument(dslContent: string): DocumentInspection {
 
   function appendChild(node: BlockNode | InlineSpan): void {
     if (stack.length > 0) {
+      // Inter-element whitespace is formatting, not content: indentation and
+      // line breaks between nested blocks never become spans. Marked spans
+      // (even a bare space inside a mark) are always kept.
+      if (node.type === "text") {
+        const span = node as InlineSpan;
+        if (!span.text.trim() && !span.marks?.length && !span.markDefs?.length) return;
+      }
       stack[stack.length - 1].children.push(node);
     } else if ("type" in node && node.type !== "text") {
       // A block ends the prose run before it, so bare text never leaks into it.
@@ -478,6 +500,7 @@ export function inspectDocument(dslContent: string): DocumentInspection {
 
         // Pop all unclosed children up to matchIdx (error recovery)
         const closedElement = stack.splice(matchIdx, 1)[0];
+        trimInlineEdges(closedElement.children);
         const blockNode: BlockNode = {
           id: generateNodeId(blockType),
           type: blockType,
@@ -500,6 +523,7 @@ export function inspectDocument(dslContent: string): DocumentInspection {
     });
     const blockDef = getBlock(remaining.name);
     const blockType = blockDef ? blockDef.type : remaining.name.toLowerCase();
+    trimInlineEdges(remaining.children);
     const node: BlockNode = {
       id: generateNodeId(blockType),
       type: blockType,
@@ -512,12 +536,23 @@ export function inspectDocument(dslContent: string): DocumentInspection {
   // Trailing prose after the last block still belongs to a paragraph.
   flushPendingRootText();
 
-  // A closing block tag glued to text breaks the production build while the preview
-  // renders it fine: Astro's MDX loader rejects `<Tag>\ntext</Tag>` (observed live —
-  // a publish with this shape reddened the deploy), so it must never be committed.
-  // Single-line elements and closings alone on their line are the legal spellings.
-  // Residual: a closing tag typed inside a CodeBlock sample or an HTML comment trips
-  // this too — a 422 naming the line, never a silent break, and drafts still save.
+  reportSharedClosingLines(dslContent, problems);
+
+  return { blocks: rootBlocks, problems };
+}
+
+/**
+ * The production-build closing rule, as its own check.
+ *
+ * A closing block tag glued to text breaks the production build while the preview
+ * renders it fine: Astro's MDX loader rejects `<Tag>\ntext</Tag>` (observed live —
+ * a publish with this shape reddened the deploy), so it must never be committed.
+ * Single-line elements and closings alone on their line are the legal spellings.
+ * Residual: a closing tag typed inside a CodeBlock sample or an HTML comment trips
+ * this too — a 422 naming the line, never a silent break, and drafts still save.
+ * AST-awareness (skipping CodeBlock bodies) is a recorded follow-up.
+ */
+function reportSharedClosingLines(dslContent: string, problems: DocumentProblem[]): void {
   const lines = dslContent.split(/\r?\n/);
   lines.forEach((line, index) => {
     for (const closing of line.matchAll(/<\/([A-Za-z][A-Za-z0-9]*)>/g)) {
@@ -535,8 +570,6 @@ export function inspectDocument(dslContent: string): DocumentInspection {
       }
     }
   });
-
-  return { blocks: rootBlocks, problems };
 }
 
 /**

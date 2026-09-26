@@ -29,15 +29,15 @@ export const youtubeBlock: BlockDefinition<YouTubeProps> = {
       embedUrl: `https://www.youtube.com/embed/${props.id}`,
     };
   },
-  render: (props) => {
+  render: (props, _childrenHtml, _data, _ctx, h) => {
     const stretch = props.stretch || "default";
     const isCustom = stretch && stretch !== "wide" && stretch !== "full" && stretch !== "default";
-    const customStyle = isCustom ? ` style="--stretch-width: ${stretch};"` : "";
+    const customStyle = isCustom ? ` style="--stretch-width: ${h.attr(stretch)};"` : "";
 
-    return `<div class="youtube-container" data-stretch="${stretch}"${customStyle}>
+    return `<div class="youtube-container" data-stretch="${h.attr(stretch)}"${customStyle}>
       <iframe
-        src="https://www.youtube-nocookie.com/embed/${props.id}"
-        title="${props.title || "YouTube video player"}"
+        src="https://www.youtube-nocookie.com/embed/${h.attr(props.id)}"
+        title="${h.attr(props.title || "YouTube video player")}"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen
         loading="lazy"

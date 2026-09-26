@@ -1,4 +1,5 @@
-import { CARET, linkSnippet, markSnippet } from "./marks";
+import { CARET } from "./marks";
+import { linkSnippet, markSnippet } from "./dsl/marks";
 import { getAllBlocks } from "./registry";
 import type { Mark } from "./types";
 

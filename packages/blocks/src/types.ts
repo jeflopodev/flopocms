@@ -74,6 +74,25 @@ export interface SchemaEntity {
   [key: string]: any;
 }
 
+/**
+ * Already-rendered markup. Constructed only by the Document Renderer, which
+ * owns interpolation: blocks receive it and interpolate it as-is, never
+ * escaping it, and never constructing it from author input themselves.
+ */
+export type RawHtml = string & { readonly __rawHtml: unique symbol };
+
+/**
+ * The escaping seam. Blocks declare values with positions and the Document
+ * Renderer decides what each position means: `attr` and `text` escape,
+ * `raw` passes renderer-built markup through. Blocks never import escaping
+ * helpers — `h` arrives as the trailing `render` argument.
+ */
+export interface HtmlEscaper {
+  attr(value: unknown): string;
+  text(value: unknown): string;
+  raw(html: RawHtml): string;
+}
+
 export interface EditorInsertion {
   label: string;
   snippet: string;
@@ -147,9 +166,16 @@ export interface BlockDefinition<TProps = any, TData = any> {
   generateJsonLd?: (props: TProps, data?: TData) => SchemaEntity | SchemaEntity[] | null;
 
   /**
-   * Self-contained rendering logic: renders HTML string.
+   * Self-contained rendering logic: renders HTML string. Values are declared
+   * with positions through `h`; `childrenHtml` is renderer-built and raw.
    */
-  render: (props: TProps, childrenHtml: string, data?: TData, ctx?: BlockRenderContext) => string;
+  render: (
+    props: TProps,
+    childrenHtml: RawHtml,
+    data: TData | undefined,
+    ctx: BlockRenderContext | undefined,
+    h: HtmlEscaper
+  ) => string;
 
   /** Self-contained CSS styles for this block */
   styles?: string;

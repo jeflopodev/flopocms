@@ -20,12 +20,12 @@ export const imageBlock: BlockDefinition<ImageBlockProps> = {
   supportsStretch: true,
   defaultProps: { stretch: "default" },
   snippet: `<Image src="/uploads/image.webp" alt="Description" caption="Optional caption" stretch="default" />`,
-  render: (props) => {
+  render: (props, _childrenHtml, _data, _ctx, h) => {
     const stretch = props.stretch || "default";
-    const captionHtml = props.caption ? `<figcaption class="prose-figcaption">${props.caption}</figcaption>` : "";
+    const captionHtml = props.caption ? `<figcaption class="prose-figcaption">${h.text(props.caption)}</figcaption>` : "";
 
-    return `<figure class="prose-figure" data-stretch="${stretch}">
-      <img src="${props.src}" alt="${props.alt || ""}" class="prose-img" loading="lazy" />
+    return `<figure class="prose-figure" data-stretch="${h.attr(stretch)}">
+      <img src="${h.attr(props.src)}" alt="${h.attr(props.alt || "")}" class="prose-img" loading="lazy" />
       ${captionHtml}
     </figure>`;
   },

@@ -35,10 +35,10 @@ export const headingBlock: BlockDefinition<HeadingProps> = {
       order: 30 + level * 10,
     })
   ),
-  render: (props, childrenHtml) => {
+  render: (props, childrenHtml, _data, _ctx, h) => {
     const level = Math.min(6, Math.max(1, props.level || 2));
     const tag = `h${level}`;
-    const idAttr = props.id ? ` id="${props.id}"` : "";
+    const idAttr = props.id ? ` id="${h.attr(props.id)}"` : "";
     return `<${tag} class="prose-heading prose-h${level}"${idAttr}>${childrenHtml}</${tag}>`;
   },
   styles: `

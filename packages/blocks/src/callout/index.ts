@@ -39,17 +39,17 @@ export const calloutBlock: BlockDefinition<CalloutProps> = {
     snippet: `<Callout variant="${variant}">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>`,
   })),
   snippet: `<Callout variant="note">\n  <Paragraph>Enter callout explanation here.</Paragraph>\n</Callout>`,
-  render: (props, childrenHtml) => {
+  render: (props, childrenHtml, _data, _ctx, h) => {
     const variant = props.variant || "note";
     const title = props.title || defaultTitles[variant] || "Note";
     const stretch = props.stretch || "default";
     const icon = icons[variant] || icons.note;
-    const customClass = props.class ? ` ${props.class}` : "";
+    const customClass = props.class ? ` ${h.attr(props.class)}` : "";
 
-    return `<aside class="callout-box callout-${variant}${customClass}" data-stretch="${stretch}" role="note">
+    return `<aside class="callout-box callout-${h.attr(variant)}${customClass}" data-stretch="${h.attr(stretch)}" role="note">
       <div class="callout-header">
         <div class="callout-icon" aria-hidden="true">${icon}</div>
-        <span class="callout-title">${title}</span>
+        <span class="callout-title">${h.text(title)}</span>
       </div>
       <div class="callout-content">
         ${childrenHtml}

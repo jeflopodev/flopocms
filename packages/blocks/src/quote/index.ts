@@ -28,9 +28,9 @@ export const quoteBlock: BlockDefinition<QuoteProps> = {
       order: 110,
     } satisfies ToolbarAction,
   ],
-  render: (props, childrenHtml) => {
-    const citeAttr = props.cite ? ` cite="${props.cite}"` : "";
-    const authorHtml = props.author ? `<footer class="quote-author">&mdash; ${props.author}</footer>` : "";
+  render: (props, childrenHtml, _data, _ctx, h) => {
+    const citeAttr = props.cite ? ` cite="${h.attr(props.cite)}"` : "";
+    const authorHtml = props.author ? `<footer class="quote-author">&mdash; ${h.text(props.author)}</footer>` : "";
 
     return `<blockquote class="prose-quote"${citeAttr}>
       ${childrenHtml}

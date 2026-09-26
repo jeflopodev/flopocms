@@ -1,15 +1,5 @@
 import type { BlockDefinition, EditorBlockDrawerMeta, EditorInsertion } from "./types";
-import { paragraphBlock } from "./paragraph";
-import { headingBlock } from "./heading";
-import { calloutBlock } from "./callout";
-import { youtubeBlock } from "./youtube";
-import { amazonProductBlock } from "./amazon-product";
-import { listBlock, listItemBlock } from "./list";
-import { quoteBlock } from "./quote";
-import { codeBlock } from "./code";
-import { relatedPostsBlock } from "./related-posts";
-import { schemaBlock } from "./schema";
-import { imageBlock } from "./image";
+import { assertBlockShape, assertBlockSlug, isBlockDefinition } from "./block-spec";
 
 /**
  * Re-exported so the editor model stays the one place an editing rule is looked up.
@@ -23,10 +13,20 @@ const tagToTypeMap = new Map<string, string>();
 
 /**
  * Registers a block definition into the central registry.
+ *
+ * Shape-checked so a malformed definition fails at startup rather than
+ * half-rendering a reader's page. Folder ownership (folder == type) is
+ * checked by the auto-loader below, which knows the folder.
  */
 export function registerBlock(block: BlockDefinition): void {
+  assertBlockShape(block, `registerBlock(${block?.type})`);
+  const tagKey = block.tagName.toLowerCase();
+  const owner = tagToTypeMap.get(tagKey);
+  if (owner !== undefined && owner !== block.type) {
+    throw new Error(`Duplicate tag <${block.tagName}>: already owned by "${owner}", rejected "${block.type}"`);
+  }
   blockRegistry.set(block.type, block);
-  tagToTypeMap.set(block.tagName.toLowerCase(), block.type);
+  tagToTypeMap.set(tagKey, block.type);
 }
 
 /**
@@ -65,27 +65,27 @@ export function getCombinedBlockStyles(): string {
   return styles.join("\n\n");
 }
 
-// The shipped set, and the only hardcoded list of blocks anywhere: each block is
-// imported once here and registered once below. Removing a block is deleting its
-// directory plus its two lines here — drawer cards, toolbar buttons, validation,
-// rendering, styles, and JSON-LD follow automatically, and content still using its
-// tag is refused at save with the block named rather than rendered half-broken.
-// (Tests asserting the exact shipped set, like the drawer order test, get pruned
-// alongside — they are change-detectors for this list, not block features.)
-[
-  paragraphBlock,
-  headingBlock,
-  calloutBlock,
-  youtubeBlock,
-  amazonProductBlock,
-  listBlock,
-  listItemBlock,
-  quoteBlock,
-  codeBlock,
-  relatedPostsBlock,
-  schemaBlock,
-  imageBlock,
-].forEach(registerBlock);
+// Pluggable by folder: each `src/<slug>/index.ts` exports its block definition,
+// and the folder name is the block slug. Adding a block is adding a folder —
+// this list never names blocks, so core code never changes for a new block.
+const blockModules = import.meta.glob("./*/index.ts", { eager: true }) as Record<
+  string,
+  Record<string, unknown>
+>;
+
+for (const [path, mod] of Object.entries(blockModules)) {
+  const slug = path.split("/")[1];
+  for (const value of Object.values(mod)) {
+    if (isBlockDefinition(value)) {
+      assertBlockSlug(value, slug, path);
+      registerBlock(value);
+    }
+  }
+}
+
+if (blockRegistry.size === 0) {
+  throw new Error("Block registry is empty: no block definitions discovered under src/*/");
+}
 
 export interface EditorBlockCard {
   type: string;
@@ -99,8 +99,9 @@ export interface EditorBlockCard {
 }
 
 /**
- * The block cards the editor drawer renders, in order. A block with no drawer metadata never
- * shows a card, which is how the toolbar-only blocks stay out of the drawer.
+ * The block cards the editor drawer renders, in order. Derived entirely from
+ * the blocks package: a block with no drawer metadata never shows a card,
+ * which is how the toolbar-only blocks stay out of the drawer.
  */
 export function getEditorBlockCards(): EditorBlockCard[] {
   return getAllBlocks()
@@ -119,4 +120,3 @@ export function getEditorBlockCards(): EditorBlockCard[] {
         : [{ label: `+ Insert ${block.drawer.insertLabel || block.label}`, snippet: block.snippet }],
     }));
 }
-

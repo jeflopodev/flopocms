@@ -1,6 +1,6 @@
 import type { BlockNode, InlineSpan } from "../types";
 import { getBlock } from "../registry";
-import { linkSnippet, markSnippet } from "../marks";
+import { linkSnippet, markSnippet } from "./marks";
 
 function formatAttrValue(val: any): string {
   if (typeof val === "string") {
@@ -71,8 +71,14 @@ export function serializeBlockNode(node: BlockNode, indent = 0): string {
     return `${spaces}<${tagName}${attrsStr}>\n${spaces}  ${inlineContent.trim()}\n${spaces}</${tagName}>`;
   }
 
-  // Nested block children
+  // Nested block children. Unmarked whitespace-only spans are formatting the
+  // parser never keeps, so writing them back would accumulate noise per cycle.
   const childrenStr = node.children
+    .filter((child) => {
+      if ("type" in child && child.type !== "text") return true;
+      const span = child as InlineSpan;
+      return span.text.trim() !== "" || span.marks?.length || span.markDefs?.length;
+    })
     .map((child) => {
       if ("type" in child && child.type !== "text") {
         return serializeBlockNode(child as BlockNode, indent + 2);

@@ -8,10 +8,6 @@ export const listSchema = v.object({
 
 export type ListProps = v.InferOutput<typeof listSchema>;
 
-export const listItemSchema = v.object({});
-
-export type ListItemProps = v.InferOutput<typeof listItemSchema>;
-
 export const ListStyleTypeSchema = v.string();
 
 export const ulSchema = v.object({

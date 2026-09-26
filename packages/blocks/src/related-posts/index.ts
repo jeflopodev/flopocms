@@ -43,7 +43,7 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
       description: article.description,
     }));
   },
-  render: (props, _childrenHtml, data, ctx) => {
+  render: (props, _childrenHtml, data, ctx, h) => {
     const list = data || [];
     const title = props.title || "Related Articles";
 
@@ -51,9 +51,9 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
       if (ctx?.isDraftPreview) {
         return `<div class="related-preview-empty">
           <div class="related-header">
-            <span class="related-title">${title}</span>
+            <span class="related-title">${h.text(title)}</span>
           </div>
-          <p class="related-empty-note">No published related articles found for category "${props.category || "General"}". (Placeholder shown in preview)</p>
+          <p class="related-empty-note">No published related articles found for category "${h.text(props.category || "General")}". (Placeholder shown in preview)</p>
         </div>`;
       }
       return "";
@@ -61,21 +61,21 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
 
     const cardsHtml = list
       .map(
-        (item) => `<a href="/blog/${item.slug}" class="related-card">
-          <span class="related-category">${item.category || "General"}</span>
-          <h4 class="related-card-title">${item.title}</h4>
-          ${item.description ? `<p class="related-card-desc">${item.description}</p>` : ""}
+        (item) => `<a href="/blog/${h.attr(item.slug)}" class="related-card">
+          <span class="related-category">${h.text(item.category || "General")}</span>
+          <h4 class="related-card-title">${h.text(item.title)}</h4>
+          ${item.description ? `<p class="related-card-desc">${h.text(item.description)}</p>` : ""}
         </a>`
       )
       .join("");
 
-    return `<section class="related-posts-block" aria-label="${title}">
+    return `<section class="related-posts-block" aria-label="${h.attr(title)}">
       <div class="related-header">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
         </svg>
-        <h3 class="related-title">${title}</h3>
+        <h3 class="related-title">${h.text(title)}</h3>
       </div>
       <div class="related-grid">
         ${cardsHtml}

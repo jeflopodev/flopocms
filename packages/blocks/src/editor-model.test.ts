@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getEditorBlockCards, getBlock } from "./registry";
-import { MARK_TAGS, linkSnippet, markSnippet } from "./marks";
+import { MARK_TAGS, linkSnippet, markSnippet } from "./dsl/marks";
 import { parseDslToBlocks } from "./dsl/parser";
 import { serializeBlocksToDsl } from "./dsl/serializer";
 import type { Mark } from "./types";
@@ -17,7 +17,6 @@ describe("editor drawer cards", () => {
       "amazon-product",
       "youtube",
       "related-posts",
-      "schema",
     ]);
   });
 
