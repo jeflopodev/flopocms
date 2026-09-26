@@ -33,6 +33,7 @@ export function registerBlock(block: BlockDefinition): void {
  * Retrieves a block definition by its type identifier or JSX tag name.
  */
 export function getBlock(identifier: string): BlockDefinition | undefined {
+  ensureLoaded();
   if (!identifier) return undefined;
   const canonicalType = tagToTypeMap.get(identifier.toLowerCase()) || identifier.toLowerCase();
   return blockRegistry.get(canonicalType);
@@ -42,6 +43,7 @@ export function getBlock(identifier: string): BlockDefinition | undefined {
  * Returns all registered block definitions.
  */
 export function getAllBlocks(): BlockDefinition[] {
+  ensureLoaded();
   return Array.from(blockRegistry.values());
 }
 
@@ -49,6 +51,7 @@ export function getAllBlocks(): BlockDefinition[] {
  * Checks if a given JSX tag name corresponds to a registered block.
  */
 export function isRegisteredTag(tagName: string): boolean {
+  ensureLoaded();
   return tagToTypeMap.has(tagName.toLowerCase());
 }
 
@@ -56,6 +59,7 @@ export function isRegisteredTag(tagName: string): boolean {
  * Aggregates CSS styles from all registered blocks into a single deduplicated stylesheet.
  */
 export function getCombinedBlockStyles(): string {
+  ensureLoaded();
   const styles: string[] = [];
   for (const block of blockRegistry.values()) {
     if (block.styles) {
@@ -68,23 +72,35 @@ export function getCombinedBlockStyles(): string {
 // Pluggable by folder: each `src/<slug>/index.ts` exports its block definition,
 // and the folder name is the block slug. Adding a block is adding a folder —
 // this list never names blocks, so core code never changes for a new block.
+//
+// Discovery is lazy on purpose: the bundler may emit a globbed namespace
+// object after this module's body (native ESM live bindings hide this, the
+// worker bundle does not), so iterating the namespaces must happen on first
+// use — when every module in the graph has been evaluated — never at import.
 const blockModules = import.meta.glob("./*/index.ts", { eager: true }) as Record<
   string,
   Record<string, unknown>
 >;
 
-for (const [path, mod] of Object.entries(blockModules)) {
-  const slug = path.split("/")[1];
-  for (const value of Object.values(mod)) {
-    if (isBlockDefinition(value)) {
-      assertBlockSlug(value, slug, path);
-      registerBlock(value);
+let discoveryRan = false;
+
+function ensureLoaded(): void {
+  if (discoveryRan) return;
+  discoveryRan = true;
+  for (const [path, mod] of Object.entries(blockModules)) {
+    if (!mod) continue;
+    const slug = path.split("/")[1];
+    for (const value of Object.values(mod)) {
+      if (isBlockDefinition(value)) {
+        assertBlockSlug(value, slug, path);
+        registerBlock(value);
+      }
     }
   }
-}
 
-if (blockRegistry.size === 0) {
-  throw new Error("Block registry is empty: no block definitions discovered under src/*/");
+  if (blockRegistry.size === 0) {
+    throw new Error("Block registry is empty: no block definitions discovered under src/*/");
+  }
 }
 
 export interface EditorBlockCard {
