@@ -19,14 +19,14 @@ try {
 const library = assetLibrarySummary(assets);
 ---
 
-<AdminLayout title="Asset Registry" activeTab="assets" fullWidth={true}>
+<AdminLayout title="Assets" activeTab="assets" fullWidth={true}>
   <div class="assets-viewport-page">
     <!-- Header -->
     <header class="page-header">
       <div>
-        <h1 class="page-title">Asset Registry</h1>
+        <h1 class="page-title">Assets</h1>
         <p class="page-subtitle">
-          Centralized media storage across the site. Upload once, reuse across any article and block component.
+          Centralized media storage across the site. Upload once, reuse across any post and block component.
         </p>
       </div>
 
@@ -125,7 +125,7 @@ const library = assetLibrarySummary(assets);
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
-          <h3>No assets in the registry</h3>
+          <h3>No assets yet</h3>
           <p>Drag and drop your images, videos, or documents into the upload box above to get started.</p>
         </div>
       ) : null}
@@ -422,8 +422,8 @@ const library = assetLibrarySummary(assets);
 
   copySnippetBtn?.addEventListener("click", async () => {
     if (!currentSelectedAsset) return;
-    // The same insertion the editor writes, so a copied asset can be pasted into an
-    // Article and render as a real block instead of literal text.
+    // The same insertion the editor writes, so a copied asset can be pasted into a
+    // Post and render as a real block instead of literal text.
     const snippet = insertionForAsset({
       url: currentSelectedAsset.url,
       mimeType: currentSelectedAsset.mimeType,

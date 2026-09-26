@@ -11,7 +11,7 @@ if (!user) {
 
 const services = createServices(Astro.locals);
 
-// Identity comes from Editor Accounts and the Article counts from the Post Store: this
+// Identity comes from Editor Accounts and the Post counts from the Post Store: this
 // page owns neither, so neither rule is written twice.
 const profile = await services.accounts.profile(user.id, {
   currentToken: Astro.cookies.get("admin_session")?.value,
@@ -42,12 +42,12 @@ const createdAtFormatted = rawDate
   : "Active";
 ---
 
-<AdminLayout title="Profile & Security" activeTab="settings">
+<AdminLayout title="Profile" activeTab="settings">
   <div class="profile-page">
     <!-- Header -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">Profile & Security</h1>
+        <h1 class="page-title">Profile</h1>
         <p class="page-subtitle">Manage your co-editor account, security credentials, and editorial activity</p>
       </div>
     </div>
@@ -68,7 +68,7 @@ const createdAtFormatted = rawDate
 
           <div class="stats-list">
             <div class="stat-item">
-              <span class="stat-label">Total Articles</span>
+              <span class="stat-label">Total Posts</span>
               <span class="stat-value">{postStats.total || 0}</span>
             </div>
             <div class="stat-item">

@@ -49,7 +49,7 @@ if (!user) throw new Error("AdminLayout rendered without an authenticated Editor
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>Articles</span>
+            <span>Posts</span>
           </a>
 
           <a href="/admin/assets" class:list={["nav-item", { active: activeTab === "assets" }]}>
@@ -58,7 +58,7 @@ if (!user) throw new Error("AdminLayout rendered without an authenticated Editor
               <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
-            <span>Asset Registry</span>
+            <span>Assets</span>
           </a>
 
           <a href="/admin/profile" class:list={["nav-item", { active: activeTab === "settings" }]}>
@@ -66,7 +66,7 @@ if (!user) throw new Error("AdminLayout rendered without an authenticated Editor
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
-            <span>Profile & Security</span>
+            <span>Profile</span>
           </a>
 
           <a href="/" target="_blank" class="nav-item external-link">
@@ -80,7 +80,7 @@ if (!user) throw new Error("AdminLayout rendered without an authenticated Editor
         </nav>
 
         <div class="sidebar-footer">
-          <a href="/admin/profile" class="user-badge-link" title="Manage Profile & Password">
+          <a href="/admin/profile" class="user-badge-link" title="Manage Profile">
             <div class="user-badge">
               <div class="avatar-circle">
                 {user.username.slice(0, 2).toUpperCase()}

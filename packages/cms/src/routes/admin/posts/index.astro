@@ -8,13 +8,24 @@ import type { PostRecord } from "../../../lib/post-store";
 // The composition root: this page names no store and writes no query.
 const services = createServices(Astro.locals);
 const posts: PostRecord[] = await services.posts.list();
+
+function parseTags(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    return [raw];
+  }
+  return [];
+}
 ---
 
-<AdminLayout title="Articles" activeTab="posts">
+<AdminLayout title="Posts" activeTab="posts">
   <div class="posts-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Articles</h1>
+        <h1 class="page-title">Posts</h1>
         <p class="page-subtitle">Manage, edit, duplicate, and publish content across the blog</p>
       </div>
 
@@ -24,12 +35,12 @@ const posts: PostRecord[] = await services.posts.list();
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          New Article
+          New Post
         </a>
       </div>
     </div>
 
-    <!-- Articles Table Card -->
+    <!-- Posts Table Card -->
     <div class="table-card">
       {posts.length === 0 ? (
         <div class="empty-state">
@@ -39,9 +50,9 @@ const posts: PostRecord[] = await services.posts.list();
               <polyline points="14 2 14 8 20 8"/>
             </svg>
           </div>
-          <h3>No Articles yet</h3>
-          <p>Get started by creating your first Article draft.</p>
-          <a href="/admin/posts/new" class="btn btn-primary">Create Article</a>
+          <h3>No Posts yet</h3>
+          <p>Get started by creating your first Post draft.</p>
+          <a href="/admin/posts/new" class="btn btn-primary">Create Post</a>
         </div>
       ) : (
         <div class="table-responsive">
@@ -51,6 +62,7 @@ const posts: PostRecord[] = await services.posts.list();
                 <th>Title & Slug</th>
                 <th>Author</th>
                 <th>Category</th>
+                <th>Tags</th>
                 <th>Status</th>
                 <th>Last Updated</th>
                 <th class="actions-col">Actions</th>
@@ -70,6 +82,20 @@ const posts: PostRecord[] = await services.posts.list();
                   </td>
                   <td>
                     <span class="category-text">{post.category || "General"}</span>
+                  </td>
+                  <td class="tags-cell">
+                    {(() => {
+                      const tags = parseTags(post.tags);
+                      return tags.length === 0 ? (
+                        <span class="tags-empty">—</span>
+                      ) : (
+                        <span class="tags-list">
+                          {tags.map((tag) => (
+                            <span class="tag-pill">{tag}</span>
+                          ))}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>
                     <span class:list={["status-badge", post.status]}>
@@ -332,6 +358,31 @@ const posts: PostRecord[] = await services.posts.list();
   .category-text {
     font-size: 0.85rem;
     color: var(--text-secondary);
+  }
+
+  .tags-cell {
+    max-width: 220px;
+  }
+
+  .tags-list {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .tag-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+  }
+
+  .tags-empty {
+    color: var(--text-muted);
   }
 
   .status-badge {
