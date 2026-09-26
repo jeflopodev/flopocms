@@ -1,8 +1,11 @@
 ---
 import { SITE_TITLE } from "../consts";
+
+const user = Astro.locals.user;
+const isAuthenticated = Boolean(user);
 ---
 
-<header class="header">
+<header class="header" data-authenticated={isAuthenticated ? "true" : "false"}>
   <div class="nav-container">
     <a href="/" class="brand">
       <div class="logo-mark">
@@ -16,6 +19,10 @@ import { SITE_TITLE } from "../consts";
     <nav class="nav-links">
       <a href="/" class="nav-link">Home</a>
       <a href="/blog" class="nav-link">Blog</a>
+      <a href="/admin/posts" class="nav-link" data-auth-only hidden={!isAuthenticated}>Admin</a>
+      <form action="/api/admin/logout" method="POST" class="logout-form" data-auth-only hidden={!isAuthenticated}>
+        <button type="submit" class="nav-link logout-button">Log out</button>
+      </form>
       <a 
         href="https://github.com" 
         target="_blank" 
@@ -30,6 +37,26 @@ import { SITE_TITLE } from "../consts";
     </nav>
   </div>
 </header>
+
+<script>
+  (async () => {
+    const header = document.querySelector("header.header");
+    if (header?.getAttribute("data-authenticated") === "true") return;
+    try {
+      const res = await fetch("/api/admin/session", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      document
+        .querySelectorAll("header.header [data-auth-only]")
+        .forEach((el) => el.removeAttribute("hidden"));
+      header?.setAttribute("data-authenticated", "true");
+    } catch {
+      // Stay logged-out: the Admin and Log out links remain hidden.
+    }
+  })();
+</script>
 
 <style>
   .header {
@@ -134,5 +161,17 @@ import { SITE_TITLE } from "../consts";
 
   .nav-icon::after {
     display: none;
+  }
+
+  .logout-form {
+    display: inline;
+    margin: 0;
+  }
+
+  .logout-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
   }
 </style>

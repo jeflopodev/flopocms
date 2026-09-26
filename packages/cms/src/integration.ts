@@ -21,6 +21,7 @@ export function cmsAdmin(): AstroIntegration {
     { pattern: "/admin/assets", entrypoint: "cms/routes/admin/assets/index.astro" },
     { pattern: "/admin/profile", entrypoint: "cms/routes/admin/profile.astro" },
     { pattern: "/api/admin/logout", entrypoint: "cms/routes/api/admin/logout.ts" },
+    { pattern: "/api/admin/session", entrypoint: "cms/routes/api/admin/session.ts" },
     { pattern: "/api/admin/assets/upload", entrypoint: "cms/routes/api/admin/assets/upload.ts" },
     { pattern: "/api/admin/assets/update", entrypoint: "cms/routes/api/admin/assets/update.ts" },
     { pattern: "/api/admin/assets/delete", entrypoint: "cms/routes/api/admin/assets/delete.ts" },
