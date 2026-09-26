@@ -365,13 +365,25 @@ const pubDateFormatted = rawPubDate ? String(rawPubDate).split("T")[0] : new Dat
           </div>
 
           <div class="form-group">
-            <label for="post-desc-field">SEO Description</label>
+            <label for="post-desc-field">Meta Description</label>
             <textarea
               id="post-desc-field"
               class="form-control"
               rows="3"
               placeholder="Concise summary for search engines and social cards..."
             >{post.description}</textarea>
+            <span class="field-hint">Used in <code>&lt;meta name="description"&gt;</code> and social cards. Not shown on the page.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="post-excerpt-field">Excerpt</label>
+            <textarea
+              id="post-excerpt-field"
+              class="form-control"
+              rows="3"
+              placeholder="Short teaser shown on listing cards and related articles..."
+            >{post.excerpt}</textarea>
+            <span class="field-hint">Shown on the blog index, home page and related articles.</span>
           </div>
 
           <div class="form-row">

@@ -12,6 +12,7 @@ function article(overrides: Partial<Article> & { slug: string }): Article {
   return {
     title: `Title ${overrides.slug}`,
     description: "",
+    excerpt: "",
     author: "jeflopo",
     category: "General",
     tags: [],

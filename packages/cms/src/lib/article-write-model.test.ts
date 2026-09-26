@@ -22,6 +22,7 @@ function storedRecord(overrides: Partial<PostRecord> = {}): PostRecord {
     slug: "untitled-article",
     title: "Untitled Article",
     description: "",
+    excerpt: "",
     category: "General",
     tags: "[]",
     author: "jeflopo",
@@ -45,6 +46,7 @@ describe("parsing an incoming Article", () => {
       slug: "untitled-article",
       title: "Untitled Article",
       description: "",
+      excerpt: "",
       category: "General",
       tags: [],
       featured_image: "",
@@ -88,6 +90,7 @@ describe("mapping a write model to the editorial record", () => {
     const record = toPostRecord(
       model({
         description: "A description",
+        excerpt: "An excerpt",
         category: "Engineering",
         tags: ["astro", "d1"],
         author: "aflopo",
@@ -104,6 +107,7 @@ describe("mapping a write model to the editorial record", () => {
 
     expect(record).toMatchObject({
       description: "A description",
+      excerpt: "An excerpt",
       category: "Engineering",
       tags: '["astro","d1"]',
       author: "aflopo",

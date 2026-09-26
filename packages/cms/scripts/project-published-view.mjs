@@ -64,6 +64,7 @@ for (const slug of slugs) {
     slug,
     title: data.title || slug,
     description: data.description || "",
+    excerpt: data.excerpt || "",
     category: "General",
     tags: "[]",
     author: data.author || "jeflopo",
@@ -82,7 +83,7 @@ for (const slug of slugs) {
 const statements = [];
 for (const row of rows) {
   statements.push(
-    `INSERT INTO posts (id, slug, title, description, category, tags, author, featured_image, content_mdx, status, template, default_width, wide_width, pub_date, created_at, updated_at) VALUES (${sqlText(row.id)}, ${sqlText(row.slug)}, ${sqlText(row.title)}, ${sqlText(row.description)}, ${sqlText(row.category)}, ${sqlText(row.tags)}, ${sqlText(row.author)}, ${sqlText(row.featuredImage)}, ${sqlText(row.contentMdx)}, 'published', ${sqlText(row.template)}, ${sqlText(row.defaultWidth)}, ${sqlText(row.wideWidth)}, ${sqlText(row.pubDate)}, ${sqlText(row.createdAt)}, ${sqlText(row.updatedAt)}) ON CONFLICT(slug) DO UPDATE SET title = excluded.title, description = excluded.description, author = excluded.author, featured_image = excluded.featured_image, content_mdx = excluded.content_mdx, status = 'published', template = excluded.template, default_width = excluded.default_width, wide_width = excluded.wide_width, pub_date = excluded.pub_date, updated_at = excluded.updated_at;`
+    `INSERT INTO posts (id, slug, title, description, excerpt, category, tags, author, featured_image, content_mdx, status, template, default_width, wide_width, pub_date, created_at, updated_at) VALUES (${sqlText(row.id)}, ${sqlText(row.slug)}, ${sqlText(row.title)}, ${sqlText(row.description)}, ${sqlText(row.excerpt)}, ${sqlText(row.category)}, ${sqlText(row.tags)}, ${sqlText(row.author)}, ${sqlText(row.featuredImage)}, ${sqlText(row.contentMdx)}, 'published', ${sqlText(row.template)}, ${sqlText(row.defaultWidth)}, ${sqlText(row.wideWidth)}, ${sqlText(row.pubDate)}, ${sqlText(row.createdAt)}, ${sqlText(row.updatedAt)}) ON CONFLICT(slug) DO UPDATE SET title = excluded.title, description = excluded.description, excerpt = excluded.excerpt, author = excluded.author, featured_image = excluded.featured_image, content_mdx = excluded.content_mdx, status = 'published', template = excluded.template, default_width = excluded.default_width, wide_width = excluded.wide_width, pub_date = excluded.pub_date, updated_at = excluded.updated_at;`
   );
 }
 

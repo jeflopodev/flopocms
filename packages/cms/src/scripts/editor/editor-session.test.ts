@@ -7,6 +7,7 @@ function metadata(): EditableArticleFields {
     slug: "untitled",
     title: "Untitled Article",
     description: "",
+    excerpt: "",
     category: "General",
     tags: [],
     author: "jeflopo",

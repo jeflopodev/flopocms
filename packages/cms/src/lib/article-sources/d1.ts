@@ -22,6 +22,7 @@ export function rowToArticle(row: any): Article {
     slug: row.slug,
     title: row.title || "",
     description: row.description || "",
+    excerpt: row.excerpt || "",
     author: row.author || "jeflopo",
     category: row.category || "General",
     tags: parseTags(row.tags),

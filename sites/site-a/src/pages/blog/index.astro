@@ -46,7 +46,7 @@ const posts = await createEnvironmentReadModel(createGitBundleSource()).listVisi
                 </time>
               </div>
               <h2 class="card-title">{post.title}</h2>
-              <p class="card-desc">{post.description}</p>
+              <p class="card-desc">{post.excerpt || post.description}</p>
               <span class="read-more">
                 Read article
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">

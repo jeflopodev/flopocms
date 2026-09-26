@@ -25,6 +25,7 @@ export const ArticleWriteModelSchema = v.object({
   slug: v.pipe(v.string(), v.nonEmpty("slug is required")),
   title: v.pipe(v.string(), v.nonEmpty("title is required")),
   description: v.optional(v.string(), ""),
+  excerpt: v.optional(v.string(), ""),
   category: v.optional(v.string(), "General"),
   tags: v.optional(v.array(v.string()), []),
   /** Resolved against the actor by Post Lifecycle when absent. */
@@ -100,6 +101,7 @@ export function toPostRecord(
     slug: model.slug.trim().toLowerCase(),
     title: model.title,
     description: model.description,
+    excerpt: model.excerpt,
     category: model.category,
     tags: JSON.stringify(model.tags),
     author: options.author,

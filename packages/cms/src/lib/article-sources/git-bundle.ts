@@ -38,6 +38,7 @@ export function entryToArticle(entry: CollectionEntry<"blog">): Article {
     slug: entry.id,
     title: data.title,
     description: data.description || "",
+    excerpt: (data as { excerpt?: string }).excerpt || "",
     author: data.author,
     category: "General",
     tags: [],

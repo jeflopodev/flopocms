@@ -40,7 +40,7 @@ export const relatedPostsBlock: BlockDefinition<RelatedPostsProps, RelatedPostIt
       slug: article.slug,
       title: article.title,
       category: article.category,
-      description: article.description,
+      description: article.excerpt || article.description,
     }));
   },
   render: (props, _childrenHtml, data, ctx, h) => {

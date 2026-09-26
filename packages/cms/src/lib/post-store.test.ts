@@ -7,6 +7,7 @@ function record(overrides: Partial<PostRecord> = {}): PostRecord {
     slug: "untitled-article",
     title: "Untitled Article",
     description: "",
+    excerpt: "",
     category: "General",
     tags: "[]",
     author: "jeflopo",

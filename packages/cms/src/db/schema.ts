@@ -33,6 +33,7 @@ export const posts = sqliteTable(
     slug: text("slug").notNull().unique(),
     title: text("title").notNull(),
     description: text("description").default("").notNull(),
+    excerpt: text("excerpt").default("").notNull(),
     category: text("category").default("General").notNull(),
     tags: text("tags").default("[]").notNull(), // JSON array string
     author: text("author").default("jeflopo").notNull(),

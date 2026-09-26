@@ -120,7 +120,7 @@ const posts = (await createEnvironmentReadModel(createGitBundleSource()).listVis
                 {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(post.pubDate))}
               </time>
               <h3 class="recent-title">{post.title}</h3>
-              <p class="recent-desc">{post.description}</p>
+              <p class="recent-desc">{post.excerpt || post.description}</p>
               <span class="recent-more">Read article &rarr;</span>
             </div>
           </a>

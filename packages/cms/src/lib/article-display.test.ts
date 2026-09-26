@@ -17,6 +17,7 @@ function article(overrides: Partial<Article> = {}): Article {
     slug: "untitled-article",
     title: "Untitled Article",
     description: "A description",
+    excerpt: "An excerpt",
     author: "jeflopo",
     category: "Astro",
     tags: ["astro"],

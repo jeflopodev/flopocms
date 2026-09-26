@@ -16,6 +16,7 @@ export interface PostRecord {
   slug: string;
   title: string;
   description: string;
+  excerpt: string;
   category: string;
   tags: string;
   author: string;
@@ -64,6 +65,7 @@ export function createD1PostStore(db: DbClient): PostStore {
     slug: record.slug,
     title: record.title,
     description: record.description,
+    excerpt: record.excerpt,
     category: record.category,
     tags: record.tags,
     author: record.author,

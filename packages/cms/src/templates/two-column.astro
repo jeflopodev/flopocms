@@ -7,7 +7,6 @@ type Props = ArticleTemplateProps;
 
 const {
   title,
-  description,
   pubDate,
   updatedDate,
   heroImage,
@@ -76,8 +75,6 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
       </div>
 
       <h1 class="article-title">{title}</h1>
-
-      {description && <p class="article-description">{description}</p>}
     </header>
 
     {heroImage && (
@@ -188,6 +185,7 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
   .meta-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.75rem;
     margin-bottom: 1.25rem;
     flex-wrap: wrap;
@@ -220,12 +218,7 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
     letter-spacing: -0.03em;
     color: var(--text-primary);
     margin-bottom: 1rem;
-  }
-
-  .article-description {
-    font-size: 1.2rem;
-    line-height: 1.6;
-    color: var(--text-secondary);
+    text-align: center;
   }
 
   .hero-image-wrapper {

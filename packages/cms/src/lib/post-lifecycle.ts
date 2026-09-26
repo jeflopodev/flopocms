@@ -8,6 +8,7 @@ import type { Services } from "./services";
 export interface PostBundleData {
   title: string;
   description?: string;
+  excerpt?: string;
   /** Required: Post Lifecycle decides the publication date, not the serializer. */
   pubDate: string;
   heroImage?: string;
@@ -68,6 +69,7 @@ export function serializePostBundle(data: PostBundleData): string {
   const {
     title,
     description = "",
+    excerpt = "",
     pubDate,
     heroImage = "",
     template = "default",
@@ -81,12 +83,13 @@ export function serializePostBundle(data: PostBundleData): string {
   const today = pubDate.split("T")[0];
   const safeTitle = title.replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
   const safeDesc = description.replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
+  const safeExcerpt = excerpt.replace(/'/g, "''").replace(/[\r\n]+/g, " ").trim();
   const heroLine = heroImage ? `heroImage: '${heroImage.replace(/'/g, "''")}'\n` : "";
   const templateLine = `template: '${template || "default"}'\n`;
   const defaultWidthLine = `defaultWidth: '${defaultWidth || "60rem"}'\n`;
   const wideWidthLine = `wideWidth: '${wideWidth || "70rem"}'\n`;
 
-  return `---\r\ntitle: '${safeTitle}'\r\ndescription: '${safeDesc}'\r\npubDate: '${today}'\r\n${heroLine}${templateLine}${defaultWidthLine}${wideWidthLine}author: '${author}'\r\ndraft: ${draft}\r\n---\r\n\r\n${contentMdx || ""}\r\n`;
+  return `---\r\ntitle: '${safeTitle}'\r\ndescription: '${safeDesc}'\r\nexcerpt: '${safeExcerpt}'\r\npubDate: '${today}'\r\n${heroLine}${templateLine}${defaultWidthLine}${wideWidthLine}author: '${author}'\r\ndraft: ${draft}\r\n---\r\n\r\n${contentMdx || ""}\r\n`;
 }
 
 /**
@@ -196,6 +199,7 @@ export async function savePostLifecycle(options: {
   const bundle = serializePostBundle({
     title: record.title,
     description: record.description,
+    excerpt: record.excerpt,
     pubDate: record.pubDate,
     heroImage: record.featuredImage,
     template: record.template,
@@ -537,6 +541,7 @@ export async function createDraftPost(options: {
     slug,
     title: "Untitled Article",
     description: "",
+    excerpt: "",
     category: "General",
     tags: "[]",
     author,

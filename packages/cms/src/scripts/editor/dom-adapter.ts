@@ -25,6 +25,7 @@ export class EditorDomAdapter {
   private postDefaultWidthField = document.getElementById("post-default-width-field") as HTMLInputElement | null;
   private postWideWidthField = document.getElementById("post-wide-width-field") as HTMLInputElement | null;
   private postDescField = document.getElementById("post-desc-field") as HTMLTextAreaElement | null;
+  private postExcerptField = document.getElementById("post-excerpt-field") as HTMLTextAreaElement | null;
   private postCategoryField = document.getElementById("post-category-field") as HTMLSelectElement | null;
   private postAuthorField = document.getElementById("post-author-field") as HTMLSelectElement | null;
   private postPubdateField = document.getElementById("post-pubdate-field") as HTMLInputElement | null;
@@ -107,6 +108,7 @@ export class EditorDomAdapter {
       slug: this.postSlugField?.value.trim() || "",
       title: this.topbarTitleInput?.value.trim() || "Untitled Article",
       description: this.postDescField?.value.trim() || "",
+      excerpt: this.postExcerptField?.value.trim() || "",
       category: this.postCategoryField?.value || "General",
       tags: tagsRaw
         .split(",")
@@ -264,6 +266,7 @@ export class EditorDomAdapter {
       this.postDefaultWidthField,
       this.postWideWidthField,
       this.postDescField,
+      this.postExcerptField,
       this.postCategoryField,
       this.postAuthorField,
       this.postPubdateField,

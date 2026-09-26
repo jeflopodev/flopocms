@@ -16,7 +16,8 @@ export function defineBlogCollection(options: { authors: readonly [string, ...st
     schema: ({ image }) =>
       z.object({
         title: z.string(),
-        description: z.string(),
+        description: z.string().default(""),
+        excerpt: z.string().default(""),
         // Transform string to Date object
         pubDate: z.coerce.date(),
         updatedDate: z.coerce.date().optional(),

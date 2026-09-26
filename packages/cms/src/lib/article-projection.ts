@@ -27,6 +27,7 @@ export function projectArticle(article: Article, options: ProjectionOptions): Po
     slug: article.slug,
     title: article.title,
     description: article.description,
+    excerpt: article.excerpt ?? "",
     category: article.category,
     tags: JSON.stringify(article.tags ?? []),
     author: article.author,
