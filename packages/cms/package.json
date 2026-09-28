@@ -1,6 +1,6 @@
 {
   "name": "@jeflopodev/cms",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": false,
   "type": "module",
   "exports": {
@@ -8,11 +8,7 @@
     "./*.astro": "./src/*.astro",
     "./*.css": "./src/*.css",
     "./assets/*": "./src/assets/*",
-    "./*": [
-      "./src/*.ts",
-      "./src/*/index.ts",
-      "./src/*"
-    ]
+    "./*": "./src/*.ts"
   },
   "files": [
     "src",
