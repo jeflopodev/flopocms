@@ -1,7 +1,7 @@
 {
-  "name": "blocks",
+  "name": "@jeflopodev/blocks",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
@@ -13,6 +13,10 @@
   ],
   "scripts": {
     "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
     "valibot": "^1.5.0"

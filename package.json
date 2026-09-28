@@ -1,16 +1,13 @@
 {
-  "name": "blog-workspace",
+  "name": "flopocms",
   "private": true,
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "packageManager": "pnpm@12.4.1",
   "scripts": {
-    "dev": "pnpm --filter site-a dev",
-    "build": "pnpm --filter site-a build",
-    "test": "pnpm --filter cms --filter blocks test",
-    "typecheck": "pnpm --filter site-a typecheck"
+    "test": "pnpm --filter cms --filter blocks test"
   }
 }

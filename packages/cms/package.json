@@ -1,7 +1,7 @@
 {
-  "name": "cms",
+  "name": "@jeflopodev/cms",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
@@ -24,11 +24,15 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
   "dependencies": {
     "@cloudflare/workers-types": "^5.20260916.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/state": "^6.7.5",
-    "blocks": "workspace:*",
+    "blocks": "workspace:@jeflopodev/blocks@*",
     "codemirror": "^6.0.2",
     "drizzle-orm": "1.0.0-rc.4",
     "sharp": "^0.35.4",
