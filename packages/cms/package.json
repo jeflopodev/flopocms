@@ -32,7 +32,7 @@
     "@cloudflare/workers-types": "^5.20260916.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/state": "^6.7.5",
-    "blocks": "workspace:@jeflopodev/blocks@*",
+    "blocks": "github:jeflopodev/flopocms#path:packages/blocks",
     "codemirror": "^6.0.2",
     "drizzle-orm": "1.0.0-rc.4",
     "sharp": "^0.35.4",
