@@ -1,12 +1,18 @@
 {
   "name": "@jeflopodev/cms",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
     "./*.astro": "./src/*.astro",
-    "./*": "./src/*.ts"
+    "./*.css": "./src/*.css",
+    "./assets/*": "./src/assets/*",
+    "./*": [
+      "./src/*.ts",
+      "./src/*/index.ts",
+      "./src/*"
+    ]
   },
   "files": [
     "src",
