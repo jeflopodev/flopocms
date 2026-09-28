@@ -20,6 +20,7 @@ const CONTENT_DIR = resolve(process.cwd(), process.env.CONTENT_DIR || join("src"
 const REVIEW_DIR = resolve(process.cwd(), process.env.REVIEW_DIR || ".review");
 const SQL_PATH = join(REVIEW_DIR, "project.sql");
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const D1_BINDING = process.env.D1_BINDING || "DB";
 
 const sqlText = (value) => `'${String(value ?? "").replace(/'/g, "''")}'`;
 
@@ -104,7 +105,7 @@ if (process.env.PROJECT_DRY_RUN === "1") {
 }
 
 try {
-  execFileSync(pnpm, ["exec", "wrangler", "d1", "execute", "DB", "--remote", "--file", SQL_PATH], {
+  execFileSync(pnpm, ["exec", "wrangler", "d1", "execute", D1_BINDING, "--remote", "--file", SQL_PATH], {
     stdio: "inherit",
     encoding: "utf-8",
   });

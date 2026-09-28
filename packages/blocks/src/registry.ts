@@ -69,6 +69,53 @@ export function getCombinedBlockStyles(): string {
   return styles.join("\n\n");
 }
 
+/**
+ * Aggregates client-side scripts (e.g. Web Components) from all registered blocks.
+ */
+export function getCombinedBlockClientScripts(): string {
+  ensureLoaded();
+  const scripts: string[] = [];
+  for (const block of blockRegistry.values()) {
+    if (block.clientScript) {
+      scripts.push(`/* Block Script: ${block.type} */\n${block.clientScript.trim()}`);
+    }
+  }
+  return scripts.join("\n\n");
+}
+
+/**
+ * Registers an array of site-specific or third-party custom blocks into the registry.
+ *
+ * Ensures default core blocks are discovered first, then registers the custom blocks.
+ * If allowOverride is true, custom blocks can override existing blocks with the same tag name.
+ */
+export function registerCustomBlocks(blocks: BlockDefinition[], allowOverride = false): void {
+  ensureLoaded();
+  for (const block of blocks) {
+    assertBlockShape(block, `registerCustomBlocks(${block?.type})`);
+    const tagKey = block.tagName.toLowerCase();
+    const owner = tagToTypeMap.get(tagKey);
+    if (owner !== undefined && owner !== block.type) {
+      if (!allowOverride) {
+        throw new Error(`Duplicate tag <${block.tagName}>: already owned by "${owner}", rejected "${block.type}"`);
+      }
+      blockRegistry.delete(owner);
+    }
+    blockRegistry.set(block.type, block);
+    tagToTypeMap.set(tagKey, block.type);
+  }
+}
+
+/**
+ * Resets the registry back to uninitialized state.
+ * Used primarily in test suites to prevent state pollution.
+ */
+export function resetBlockRegistry(): void {
+  blockRegistry.clear();
+  tagToTypeMap.clear();
+  discoveryRan = false;
+}
+
 // Pluggable by folder: each `src/<slug>/index.ts` exports its block definition,
 // and the folder name is the block slug. Adding a block is adding a folder —
 // this list never names blocks, so core code never changes for a new block.

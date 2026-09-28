@@ -83,24 +83,46 @@ async function main() {
   const escapedUsername = username.replace(/'/g, "''");
   const sql = `INSERT INTO users (id, username, password_hash, salt) VALUES ('${id}', '${escapedUsername}', '${hash}', '${salt}') ON CONFLICT(username) DO UPDATE SET password_hash = '${hash}', salt = '${salt}';\n`;
 
-  const tempSqlFile = path.join(process.cwd(), "scripts", `_temp_user_${Date.now()}.sql`);
+  let dbName = process.env.D1_DATABASE_NAME || "blog-astro";
+  const dbIdx = args.indexOf("--database");
+  if (dbIdx !== -1 && args[dbIdx + 1]) {
+    dbName = args[dbIdx + 1].trim();
+  } else {
+    for (const configName of ["wrangler.jsonc", "wrangler.json"]) {
+      const configPath = path.join(process.cwd(), configName);
+      if (fs.existsSync(configPath)) {
+        try {
+          const raw = fs.readFileSync(configPath, "utf-8");
+          const cleaned = raw.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+          const parsed = JSON.parse(cleaned);
+          if (parsed.d1_databases?.[0]?.database_name) {
+            dbName = parsed.d1_databases[0].database_name;
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  const os = await import("node:os");
+  const tempSqlFile = path.join(os.tmpdir(), `_temp_user_${Date.now()}.sql`);
   fs.writeFileSync(tempSqlFile, sql, "utf-8");
 
   try {
-    console.log(`\n[+] Provisioning user '${username}' in ${isRemote ? "REMOTE" : "LOCAL"} D1 database...`);
+    console.log(`\n[+] Provisioning user '${username}' in ${isRemote ? "REMOTE" : "LOCAL"} D1 database '${dbName}'...`);
     const envVars = {
       ...process.env,
       CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_D1_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_D1_TOKEN,
     };
 
-    execSync(`npx wrangler d1 execute blog-astro ${targetFlag} --file="${tempSqlFile}"`, {
+    execSync(`npx wrangler d1 execute ${dbName} ${targetFlag} --file="${tempSqlFile}"`, {
       stdio: "inherit",
       encoding: "utf-8",
       env: envVars,
     });
 
-    console.log(`\n[✓] User '${username}' successfully configured!\n`);
+    console.log(`\n[✓] User '${username}' successfully configured in database '${dbName}'!\n`);
   } catch (err) {
     console.error("\n[!] Failed to execute user provisioning in D1:", err.message);
     process.exit(1);

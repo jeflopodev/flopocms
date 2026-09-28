@@ -7,6 +7,13 @@
     "./package.json": "./package.json",
     "./*": "./src/*"
   },
+  "files": [
+    "src",
+    "migrations",
+    "scripts",
+    "!**/*.test.ts",
+    "!**/test/**"
+  ],
   "bin": {
     "cms-project-view": "./scripts/project-published-view.mjs",
     "cms-create-user": "./scripts/create-user.mjs",
@@ -19,7 +26,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "^5.20260916.1",
-    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/lang-html": "^6.4.12",
     "@codemirror/state": "^6.7.5",
     "blocks": "workspace:*",
     "codemirror": "^6.0.2",

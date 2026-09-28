@@ -1,6 +1,6 @@
 import { EditorView, minimalSetup } from "codemirror";
 import { Compartment } from "@codemirror/state";
-import { markdown } from "@codemirror/lang-markdown";
+import { html } from "@codemirror/lang-html";
 import { EditorSession } from "./editor-session";
 import { EditorDomAdapter } from "./dom-adapter";
 import { LockManager } from "./lock-manager";
@@ -142,7 +142,7 @@ export function initEditor(data: EditorInitData): void {
     doc: post.content_mdx || "",
     extensions: [
       minimalSetup,
-      markdown(),
+      html({ matchClosingTags: true, autoCloseTags: true }),
       EditorView.lineWrapping,
       editableCompartment.of(EditorView.editable.of(!session.isReadOnly)),
       themeConfig,

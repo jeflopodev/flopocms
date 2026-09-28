@@ -179,4 +179,10 @@ export interface BlockDefinition<TProps = any, TData = any> {
 
   /** Self-contained CSS styles for this block */
   styles?: string;
+
+  /**
+   * Self-contained client-side script for this block (e.g. Web Component registration).
+   * Loaded only once when the block or article is rendered.
+   */
+  clientScript?: string;
 }

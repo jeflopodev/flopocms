@@ -77,11 +77,15 @@ The human-friendly, unambiguous JSX-based authoring and storage syntax replacing
 _Avoid_: Markdown text, MDX body
 
 **Block Registry**:
-The central typed registry (`src/blocks/registry.ts`) that auto-registers pluggable block definitions, compiling schemas, self-contained CSS styles, server-side data fetchers, and JSON-LD generators.
+The central typed registry (`packages/blocks/src/registry.ts`) that registers standard and site-specific custom block definitions, compiling schemas, self-contained CSS styles, server-side data fetchers, client scripts, and JSON-LD generators.
 _Avoid_: Component list, widget index
 
+**Dynamic Block**:
+A Block Node that resolves dynamic data at build time via `loadServerData` or at runtime in the browser via an encapsulated Web Component client script (`clientScript`), while leaving the Article page 100% statically pre-rendered.
+_Avoid_: Dynamic page, SSR article, iframe widget
+
 **Document Renderer**:
-The unified rendering engine (`renderDocument`) that deterministically parses the JSX Block DSL and produces identical HTML markup, self-contained CSS, and JSON-LD graphs across both Live Draft Preview and production.
+The unified rendering engine (`renderDocument`) that deterministically parses the JSX Block DSL and produces identical HTML markup, self-contained CSS, client scripts, and JSON-LD graphs across both Live Draft Preview and production.
 _Avoid_: Markdown parser, regex renderer
 
 **Breakout Component**:

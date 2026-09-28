@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import * as v from "valibot";
-import { getAllBlocks, getEditorBlockCards } from "./registry";
+import {
+  getAllBlocks,
+  getBlock,
+  getEditorBlockCards,
+  registerCustomBlocks,
+  getCombinedBlockClientScripts,
+  resetBlockRegistry,
+} from "./registry";
 import { KEBAB_CASE_PATTERN, BLOCK_CATEGORIES } from "./block-spec";
 import { htmlEscaper, renderDocument } from "./dsl/renderer";
-import type { RawHtml } from "./types";
+import type { BlockDefinition, RawHtml } from "./types";
 
 const XSS = '<script>alert("xss")</script>';
 const emptyChildren = "" as RawHtml;
@@ -183,5 +190,53 @@ describe("document JSON-LD", () => {
     const first = await renderDocument(body, ctx);
     expect(calls).toBe(1);
     expect(first.html).toBe((await renderDocument(body, ctx)).html);
+  });
+});
+
+describe("custom block registration and client scripts", () => {
+  const dummyCustomBlock: BlockDefinition = {
+    type: "test-custom-poll",
+    tagName: "TestCustomPoll",
+    label: "Custom Poll",
+    category: "embed",
+    icon: "<svg>test</svg>",
+    snippet: "<TestCustomPoll />",
+    schema: v.object({
+      pollId: v.optional(v.string()),
+    }),
+    render: (props, _children, _data, _ctx, h) =>
+      `<custom-poll-widget data-id="${h.attr(props.pollId || 'default')}"></custom-poll-widget>`,
+    styles: "custom-poll-widget { display: block; }",
+    clientScript: "class CustomPoll extends HTMLElement {} customElements.define('custom-poll-widget', CustomPoll);",
+    drawer: {
+      description: "Test poll drawer card",
+      preview: "<TestCustomPoll />",
+      order: 10,
+    },
+  };
+
+  it("registers a custom block and exposes it to getBlock and renderDocument", async () => {
+    registerCustomBlocks([dummyCustomBlock]);
+
+    expect(getBlock("TestCustomPoll")).toBeDefined();
+    expect(getBlock("test-custom-poll")?.type).toBe("test-custom-poll");
+
+    const result = await renderDocument('<TestCustomPoll pollId="p-123" />');
+    expect(result.html).toContain('data-id="p-123"');
+    expect(result.styles).toContain("custom-poll-widget");
+    expect(result.scripts).toContain("customElements.define('custom-poll-widget'");
+  });
+
+  it("refuses duplicate tags by default, and allows override when configured", () => {
+    // Attempting to register another block with the same tag without override throws
+    const conflictingBlock: BlockDefinition = {
+      ...dummyCustomBlock,
+      type: "different-type",
+    };
+    expect(() => registerCustomBlocks([conflictingBlock], false)).toThrow("Duplicate tag <TestCustomPoll>");
+
+    // With allowOverride: true, it successfully replaces it
+    expect(() => registerCustomBlocks([conflictingBlock], true)).not.toThrow();
+    expect(getBlock("TestCustomPoll")?.type).toBe("different-type");
   });
 });

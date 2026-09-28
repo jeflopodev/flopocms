@@ -1,8 +1,16 @@
 import type { AstroIntegration } from "astro";
+import { registerCustomBlocks } from "blocks/registry";
+import { type CmsConfig, setCmsConfig } from "./config";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * Serves the CMS-owned editorial surfaces (`/admin`, `/api/admin`) from this
  * package into whichever site registers the integration.
+ *
+ * Accepts optional site-specific CmsConfig to register custom blocks, settings,
+ * themes, and site metadata.
  *
  * The draft preview (`/admin/posts/[id]/preview`) and the sign-in page
  * (`/admin/login`) are deliberately absent: both compose the site's own page
@@ -12,7 +20,14 @@ import type { AstroIntegration } from "astro";
  * differences arrive as env vars (`CONTENT_DIR`, `UPLOADS_DIR`, D1, PAT),
  * never as code.
  */
-export function cmsAdmin(): AstroIntegration {
+export function cmsAdmin(siteConfig?: CmsConfig): AstroIntegration {
+  if (siteConfig) {
+    setCmsConfig(siteConfig);
+    if (siteConfig.blocks && siteConfig.blocks.length > 0) {
+      registerCustomBlocks(siteConfig.blocks);
+    }
+  }
+
   const routes: Array<{ pattern: string; entrypoint: string }> = [
     { pattern: "/admin", entrypoint: "cms/routes/admin/index.astro" },
     { pattern: "/admin/posts", entrypoint: "cms/routes/admin/posts/index.astro" },
@@ -46,8 +61,52 @@ export function cmsAdmin(): AstroIntegration {
   return {
     name: "cms-admin",
     hooks: {
-      "astro:config:setup": ({ injectRoute }) => {
+      "astro:config:setup": ({ injectRoute, updateConfig, config }) => {
         for (const route of routes) injectRoute(route);
+
+        let resolvedConfigImport = "";
+        try {
+          const rootDir = fileURLToPath(config.root);
+          for (const ext of [".ts", ".js", ".mjs"]) {
+            const candidate = path.join(rootDir, `cms.config${ext}`);
+            if (fs.existsSync(candidate)) {
+              resolvedConfigImport = candidate.replace(/\\/g, "/");
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to resolve cms.config for runtime init:", e);
+        }
+
+        updateConfig({
+          vite: {
+            plugins: [
+              {
+                name: "cms-runtime-init",
+                resolveId(id: string) {
+                  if (id === "virtual:cms-init") {
+                    return "\0virtual:cms-init";
+                  }
+                },
+                load(id: string) {
+                  if (id === "\0virtual:cms-init") {
+                    if (resolvedConfigImport) {
+                      return `
+import siteConfig from "${resolvedConfigImport}";
+import { registerCustomBlocks } from "blocks/registry";
+if (siteConfig?.blocks && Array.isArray(siteConfig.blocks)) {
+  registerCustomBlocks(siteConfig.blocks, true);
+}
+export default siteConfig;
+`;
+                    }
+                    return `export default {};`;
+                  }
+                },
+              },
+            ],
+          },
+        });
       },
     },
   };

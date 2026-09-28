@@ -1,6 +1,6 @@
 import type { BlockNode, BlockRenderContext, HtmlEscaper, InlineSpan, RawHtml } from "../types";
 import { parseDslToBlocks } from "./parser";
-import { getBlock, getCombinedBlockStyles } from "../registry";
+import { getBlock, getCombinedBlockClientScripts, getCombinedBlockStyles } from "../registry";
 
 export interface RenderDocumentResult {
   html: string;
@@ -10,6 +10,7 @@ export interface RenderDocumentResult {
     "@graph": any[];
   };
   styles: string;
+  scripts?: string;
 }
 
 function escapeValue(value: unknown): string {
@@ -255,10 +256,14 @@ export async function renderDocument(
   // 4. Collect CSS styles
   const styles = getCombinedBlockStyles();
 
+  // 5. Collect client scripts (e.g. Web Components)
+  const scripts = getCombinedBlockClientScripts();
+
   return {
     html,
     blocks,
     jsonLd,
     styles,
+    scripts,
   };
 }

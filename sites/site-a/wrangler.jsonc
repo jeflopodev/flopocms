@@ -17,7 +17,7 @@
       "binding": "DB",
       "database_name": "blog-astro",
       "database_id": "9581dcca-affa-4a29-b448-a992869c1e1d",
-      "migrations_dir": "../../packages/cms/migrations"
+      "migrations_dir": "node_modules/cms/migrations"
     }
   ]
 }

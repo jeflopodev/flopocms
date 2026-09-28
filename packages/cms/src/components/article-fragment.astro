@@ -1,4 +1,5 @@
 ---
+import "virtual:cms-init";
 import { renderDocument } from "blocks/dsl";
 import { articleDisplayPlan, type DisplayMode } from "../lib/article-display";
 import type { Article, ArticleReadModel } from "../lib/article";
@@ -22,7 +23,7 @@ interface Props {
 const { article, articles, mode } = Astro.props;
 
 const plan = articleDisplayPlan(article, mode, articles);
-const { html, jsonLd, styles } = await renderDocument(article.content, plan.blockContext);
+const { html, jsonLd, styles, scripts } = await renderDocument(article.content, plan.blockContext);
 const Template = getTemplateComponent(plan.template);
 ---
 
@@ -32,3 +33,4 @@ const Template = getTemplateComponent(plan.template);
 </Template>
 
 <style is:inline set:html={styles} />
+{scripts && <script is:inline set:html={scripts} />}

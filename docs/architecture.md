@@ -82,6 +82,16 @@ flowchart TB
 4. **Explicit Authorial Intent ([ADR-0009](file:///e:/repos/astro/blog/docs/adr/0009-explicit-editorial-publishing-and-d1-drafts.md))**:
    - Zero background network autosave: local changes update dirty state (`isDirty = true`) protected by `beforeunload`.
    - Explicit publishing directly to `main` via atomic commits, bypassing fragile multi-step pull request branch dances.
+5. **Decoupled Pluggable Blocks & Declarative Config ([ADR-0017](file:///e:/repos/astro/blog/docs/adr/0017-pluggable-site-blocks-and-declarative-config.md))**:
+   - Sites define proprietary custom blocks and settings in `cms.config.ts`.
+   - The CMS integration registers a Vite virtual module (`virtual:cms-init`) so custom blocks participate in SSG builds and the Admin drawer without touching CMS core.
+6. **Static Posts with Dynamic Blocks & Pure Cloudflare Assets ([ADR-0018](file:///e:/repos/astro/blog/docs/adr/0018-static-posts-with-dynamic-blocks.md))**:
+   - Reader posts are 100% static HTML (Astro SSG) served by Cloudflare Static Assets.
+   - Blocks access dynamic data via build-time `loadServerData` or client-side Web Components (`clientScript` querying edge APIs).
+   - Zero Cloudflare R2: media assets are deployed to Cloudflare Assets directly from `public/uploads/`.
+7. **Bare-Text Prose & No-Markdown Editor ([ADR-0019](file:///e:/repos/astro/blog/docs/adr/0019-bare-text-prose-and-no-markdown-editor.md))**:
+   - Prose paragraphs are written as bare text separated by blank lines; markdown characters have no formatting side effects.
+   - CodeMirror uses tag/attribute highlighting (`@codemirror/lang-html`) for clean JSX DSL authoring.
 
 ---
 
