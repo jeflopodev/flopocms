@@ -1,5 +1,5 @@
-import { slugify } from "../../utils/slugify";
-import type { EditableArticleFields } from "../../lib/article-write-model";
+import { slugify } from "#/utils/slugify";
+import type { EditableArticleFields } from "#/lib/article-write-model";
 import type { EditorSession, SessionSnapshot } from "./editor-session";
 
 export interface EditorDomAdapterOptions {

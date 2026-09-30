@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute, readJson } from "../../../../lib/admin-route";
+import { adminRoute, readJson } from "#/lib/admin-route";
 
 interface UpdateAssetPayload {
   id?: string;

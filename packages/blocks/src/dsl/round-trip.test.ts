@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { inspectDocument, parseDslToBlocks } from "./parser";
 import { serializeBlocksToDsl } from "./serializer";
-import { getEditorBlockCards } from "../registry";
-import type { BlockNode, InlineSpan } from "../types";
+import { getEditorBlockCards } from "#/registry";
+import type { BlockNode, InlineSpan } from "#/types";
 
 /** Block trees minus minted ids: the stable shape a round trip must preserve. */
 function stableShape(nodes: (BlockNode | InlineSpan)[]): unknown {

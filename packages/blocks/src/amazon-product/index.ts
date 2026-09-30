@@ -1,4 +1,4 @@
-import type { BlockDefinition } from "../types";
+import type { BlockDefinition } from "#/types";
 import { amazonProductSchema, type AmazonProductProps } from "./schema";
 
 export * from "./schema";

@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import type { BlockNode, InlineSpan, Mark, MarkDef } from "../types";
-import { getBlock, isRegisteredTag } from "../registry";
+import type { BlockNode, InlineSpan, Mark, MarkDef } from "#/types";
+import { getBlock, isRegisteredTag } from "#/registry";
 import { MARK_TAG_ALIASES } from "./marks";
 
 interface TokenTag {

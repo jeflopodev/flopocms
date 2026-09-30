@@ -9,15 +9,19 @@ export function getRuntimeEnv<T = string>(key: string, locals?: App.Locals): T |
   const cloudflareModuleEnv = (env as Record<string, any>)?.[key];
   if (cloudflareModuleEnv !== undefined) return cloudflareModuleEnv as T;
 
-  // 2. Astro locals (Astro Cloudflare adapter context)
-  const localsRuntime = (locals as any)?.runtime?.env?.[key];
-  if (localsRuntime !== undefined) return localsRuntime as T;
+  // 2. Astro locals fallback (safely guarded against throwing getters in Astro v6/v7)
+  try {
+    const localsEnv = (locals as any)?.env?.[key];
+    if (localsEnv !== undefined) return localsEnv as T;
 
-  const localsCfContext = (locals as any)?.cfContext?.env?.[key];
-  if (localsCfContext !== undefined) return localsCfContext as T;
+    const localsCfContext = (locals as any)?.cfContext?.env?.[key];
+    if (localsCfContext !== undefined) return localsCfContext as T;
 
-  const localsEnv = (locals as any)?.env?.[key];
-  if (localsEnv !== undefined) return localsEnv as T;
+    const localsRuntime = (locals as any)?.runtime?.env?.[key];
+    if (localsRuntime !== undefined) return localsRuntime as T;
+  } catch {
+    // Ignore deprecated throwing getters
+  }
 
   // 3. Node process.env fallback (local scripts, dev server, CLI)
   if (typeof process !== "undefined" && process.env?.[key] !== undefined) {
@@ -35,16 +39,18 @@ export function getGithubPat(locals?: App.Locals): string | undefined {
 }
 
 /**
+ * Resolves target GitHub repository (GITHUB_REPO) for Git-Sync publishing.
+ */
+export function getGithubRepo(locals?: App.Locals): string | undefined {
+  return getRuntimeEnv<string>("GITHUB_REPO", locals);
+}
+
+/**
  * Repo-relative directory holding Post Bundles on `main`, and repo-relative
  * directory holding asset bytes on `main`.
- *
- * Monorepo-phase defaults: the only site lives at `sites/site-a`. Sites override
- * via `CONTENT_DIR` / `UPLOADS_DIR` runtime vars (required once the CMS is
- * versioned — a package must never hardcode a site's layout). The local mirror
- * stays cwd-relative and is unaffected.
  */
-export const DEFAULT_CONTENT_DIR = "sites/site-a/src/content/blog";
-export const DEFAULT_UPLOADS_DIR = "sites/site-a/public/uploads";
+export const DEFAULT_CONTENT_DIR = "src/content/blog";
+export const DEFAULT_UPLOADS_DIR = "public/uploads";
 
 export function getContentDir(locals?: App.Locals): string {
   return getRuntimeEnv<string>("CONTENT_DIR", locals) ?? DEFAULT_CONTENT_DIR;
@@ -61,7 +67,7 @@ export function getD1Database(locals?: App.Locals): D1Database {
   const db = getRuntimeEnv<D1Database>("DB", locals);
   if (!db) {
     throw new Error(
-      "D1 database binding 'DB' is not available. Ensure wrangler.jsonc contains the d1_databases binding for 'DB'."
+      "D1 database binding 'DB' is not available. Ensure cloudflare.config.ts contains the DB binding for D1."
     );
   }
   return db;

@@ -1,4 +1,4 @@
-import type { BlockDefinition } from "../types";
+import type { BlockDefinition } from "#/types";
 import { listItemSchema, type ListItemProps } from "./schema";
 
 export * from "./schema";

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EditorSession, type SaveOutcome, type SessionSnapshot } from "./editor-session";
-import type { EditableArticleFields } from "../../lib/article-write-model";
+import type { EditableArticleFields } from "#/lib/article-write-model";
 
 function metadata(): EditableArticleFields {
   return {

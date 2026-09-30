@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { drizzle } from "drizzle-orm/d1";
-import * as schema from "../db/schema";
+import * as schema from "#/db/schema";
 import { getD1Database } from "./env";
 
 export function getD1(locals?: App.Locals): D1Database {
@@ -16,7 +16,7 @@ export function getDb(locals?: App.Locals) {
 }
 
 export type DbClient = ReturnType<typeof getDb>;
-export * from "../db/schema";
+export * from "#/db/schema";
 
 /**
  * @deprecated Schema migrations are now managed declaratively via Wrangler / Drizzle migrations.

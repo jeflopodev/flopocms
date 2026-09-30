@@ -1,6 +1,6 @@
 ---
 import { Image } from "astro:assets";
-import { isBundledHeroImage, type ArticleTemplateProps } from "../lib/article";
+import { isBundledFeaturedImage, type ArticleTemplateProps } from "#/lib/article";
 
 /** The Article mapping in `toTemplateProps` is the only producer of these props. */
 type Props = ArticleTemplateProps;
@@ -9,12 +9,15 @@ const {
   title,
   pubDate,
   updatedDate,
+  featuredImage,
   heroImage,
   draft,
   author,
   defaultWidth = "60rem",
   wideWidth = "70rem",
 } = Astro.props;
+
+const effectiveImage = featuredImage ?? heroImage;
 
 const formattedPubDate = pubDate ? new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -77,21 +80,21 @@ const formattedUpdatedDate = updatedDate ? new Intl.DateTimeFormat('en-US', {
       <h1 class="article-title">{title}</h1>
     </header>
 
-    {heroImage && (
+    {effectiveImage && (
       <div class="hero-image-wrapper">
-        {isBundledHeroImage(heroImage) ? (
+        {isBundledFeaturedImage(effectiveImage) ? (
           /* A bundle asset the build imported: measured, so it can be optimized. */
           <Image
             width={1100}
             height={550}
-            src={heroImage}
+            src={effectiveImage}
             alt={title}
             class="hero-img"
             loading="eager"
           />
         ) : (
           /* An editorial URL: nothing measured it, so it renders as it is. */
-          <img src={heroImage} alt={title} class="hero-img" loading="eager" />
+          <img src={effectiveImage} alt={title} class="hero-img" loading="eager" />
         )}
       </div>
     )}

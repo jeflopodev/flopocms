@@ -1,6 +1,6 @@
-import type { BlockNode, BlockRenderContext, HtmlEscaper, InlineSpan, RawHtml } from "../types";
+import type { BlockNode, BlockRenderContext, HtmlEscaper, InlineSpan, RawHtml } from "#/types";
 import { parseDslToBlocks } from "./parser";
-import { getBlock, getCombinedBlockClientScripts, getCombinedBlockStyles } from "../registry";
+import { getBlock, getCombinedBlockClientScripts, getCombinedBlockStyles } from "#/registry";
 
 export interface RenderDocumentResult {
   html: string;
@@ -126,6 +126,7 @@ async function loadAllServerData(
   ctx: BlockRenderContext,
   map: Map<string, any>
 ): Promise<void> {
+  if (!Array.isArray(nodes) || nodes.length === 0) return;
   const inFlight = new Map<string, Promise<any>>();
   const tasks: Promise<void>[] = [];
 
@@ -139,6 +140,7 @@ async function loadAllServerData(
   };
 
   function traverse(node: BlockNode) {
+    if (!node || typeof node !== "object") return;
     const blockDef = getBlock(node.type);
     if (blockDef?.loadServerData) {
       const key = `${node.type}:${stableKey(node.props)}`;
@@ -175,6 +177,7 @@ async function loadAllServerData(
  * their first occurrence, keeping the graph valid.
  */
 function collectJsonLdEntities(nodes: BlockNode[], map: Map<string, any>): any[] {
+  if (!Array.isArray(nodes) || nodes.length === 0) return [];
   const entities: any[] = [];
   const seenIds = new Set<string>();
 
@@ -188,6 +191,7 @@ function collectJsonLdEntities(nodes: BlockNode[], map: Map<string, any>): any[]
   };
 
   function traverse(node: BlockNode) {
+    if (!node || typeof node !== "object") return;
     const blockDef = getBlock(node.type);
     if (blockDef?.generateJsonLd) {
       const data = map.get(node.id);
@@ -214,10 +218,10 @@ function collectJsonLdEntities(nodes: BlockNode[], map: Map<string, any>): any[]
  * High-performance, unified document renderer for both Live Draft Preview and Production.
  */
 export async function renderDocument(
-  content: string | BlockNode[],
+  content: string | BlockNode[] | undefined | null,
   ctx: BlockRenderContext = {}
 ): Promise<RenderDocumentResult> {
-  const blocks = typeof content === "string" ? parseDslToBlocks(content) : content;
+  const blocks = (typeof content === "string" ? parseDslToBlocks(content || "") : content) || [];
   const serverDataMap = new Map<string, any>();
 
   // 1. Asynchronously load server-side data (e.g. RelatedPosts querying D1)

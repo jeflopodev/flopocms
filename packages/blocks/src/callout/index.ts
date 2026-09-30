@@ -1,4 +1,4 @@
-import type { BlockDefinition } from "../types";
+import type { BlockDefinition } from "#/types";
 import { calloutSchema, type CalloutProps } from "./schema";
 
 export * from "./schema";

@@ -1,7 +1,7 @@
 export const prerender = false;
 
 import type { APIRoute } from "astro";
-import { createServices } from "../../../lib/services";
+import { createServices } from "#/lib/services";
 
 export const POST: APIRoute = async ({ cookies, locals, redirect }) => {
   const token = cookies.get("admin_session")?.value;

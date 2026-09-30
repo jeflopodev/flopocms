@@ -8,6 +8,9 @@
   },
   "packageManager": "pnpm@12.4.1",
   "scripts": {
-    "test": "pnpm --filter cms --filter blocks test"
+    "dev": "pnpm --filter @jeflopodev/cms dev",
+    "build": "pnpm --filter @jeflopodev/cms build",
+    "test": "pnpm --filter @jeflopodev/cms --filter @jeflopodev/blocks test",
+    "d1:migrate": "pnpm --filter @jeflopodev/cms d1:migrate"
   }
 }

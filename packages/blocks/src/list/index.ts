@@ -1,6 +1,6 @@
-import { CARET } from "../marks";
-import type { ToolbarAction } from "../toolbar";
-import type { BlockDefinition } from "../types";
+import { CARET } from "#/marks";
+import type { ToolbarAction } from "#/toolbar";
+import type { BlockDefinition } from "#/types";
 import { listSchema, type ListProps } from "./schema";
 
 export * from "./schema";

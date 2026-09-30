@@ -1,7 +1,7 @@
 import * as v from "valibot";
-import { CARET } from "../marks";
-import type { ToolbarAction } from "../toolbar";
-import type { BlockDefinition } from "../types";
+import { CARET } from "#/marks";
+import type { ToolbarAction } from "#/toolbar";
+import type { BlockDefinition } from "#/types";
 
 export const codeBlockSchema = v.object({
   lang: v.optional(v.string(), "typescript"),

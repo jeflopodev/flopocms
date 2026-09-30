@@ -1,7 +1,7 @@
 import type { DbClient } from "./db";
 import { getDb } from "./db";
-import { getContentDir, getGithubPat, getUploadsDir } from "./env";
-import { DEFAULT_REPO, HttpGithubContents, type GithubContents } from "./github-contents";
+import { getContentDir, getGithubPat, getGithubRepo, getUploadsDir } from "./env";
+import { HttpGithubContents, type GithubContents } from "./github-contents";
 import { getMediaStorage, type MediaStorage } from "./media-storage";
 import { createD1LockStore, type LockStore } from "./locks";
 import { systemClock, type Clock } from "./clock";
@@ -49,14 +49,23 @@ export interface Services {
   clock: Clock;
 }
 
-export function createServices(locals?: App.Locals, overrides: Partial<Services> = {}): Services {
+export function createServices(
+  locals?: App.Locals,
+  overrides: Partial<Services & { repo?: string }> = {}
+): Services {
   const pat = getGithubPat(locals);
+  const repo = overrides.repo ?? getGithubRepo(locals);
+
+  if (pat && !repo) {
+    throw new Error("Configuration Error: GITHUB_REPO must be defined when GITHUB_PAT is set.");
+  }
+
   const db = overrides.db ?? getDb(locals);
   const contents =
     overrides.contents !== undefined
       ? overrides.contents
-      : pat
-        ? new HttpGithubContents({ pat, repo: DEFAULT_REPO })
+      : pat && repo
+        ? new HttpGithubContents({ pat, repo })
         : null;
 
   const clock = overrides.clock ?? systemClock;

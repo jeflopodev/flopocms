@@ -22,7 +22,7 @@ export type TemplateId = "default" | "two-column";
  * deliberate: an `{ src }` that pretended both were interchangeable is what let a Draft's
  * URL reach `<Image>`.
  */
-export interface BundledHeroImage {
+export interface BundledFeaturedImage {
   src: string;
   width: number;
   height: number;
@@ -30,7 +30,16 @@ export interface BundledHeroImage {
   format: "jpeg" | "jpg" | "png" | "apng" | "tiff" | "webp" | "gif" | "svg" | "avif";
 }
 
-export type HeroImage = string | BundledHeroImage;
+export type FeaturedImage = string | BundledFeaturedImage;
+
+export function isBundledFeaturedImage(image: unknown): image is BundledFeaturedImage {
+  return typeof image === "object" && image !== null && "src" in image && "width" in image && "height" in image;
+}
+
+// Aliases for backwards compatibility
+export type BundledHeroImage = BundledFeaturedImage;
+export type HeroImage = FeaturedImage;
+export const isBundledHeroImage = isBundledFeaturedImage;
 
 export interface Article {
   /** Stable identity of the Article. Also the URL segment on production. */
@@ -44,6 +53,7 @@ export interface Article {
   /** ISO timestamp. */
   pubDate: string;
   updatedAt?: string;
+  featuredImage?: FeaturedImage;
   heroImage?: HeroImage;
   template: TemplateId;
   defaultWidth: string;
@@ -64,19 +74,6 @@ export interface ArticleSource {
    * for the editorial record it may also be the post id.
    */
   load(identifier: string): Promise<Article | null>;
-}
-
-/**
- * Whether a hero image is a bundle asset the build measured, rather than an editorial URL.
- *
- * The distinction lives here, as a rule with tests, because a Post Template is a `.astro`
- * file and nothing in this project type-checks one: TypeScript 7 does not expose the API
- * `astro check` needs, and `tsc` does not read `.astro`. The template can only ask.
- */
-export function isBundledHeroImage(
-  heroImage: HeroImage | undefined
-): heroImage is BundledHeroImage {
-  return typeof heroImage === "object" && heroImage !== null;
 }
 
 export interface ArticleVisibility {
@@ -143,6 +140,7 @@ export interface ArticleTemplateProps {
   description: string;
   pubDate: Date;
   updatedDate?: Date;
+  featuredImage?: FeaturedImage;
   heroImage?: HeroImage;
   draft: boolean;
   author: string;
@@ -190,12 +188,14 @@ export function createEnvironmentReadModel(source: ArticleSource): ArticleReadMo
  * Live Draft Preview cross this same function, which is what keeps their markup identical.
  */
 export function toTemplateProps(article: Article): ArticleTemplateProps {
+  const image = article.featuredImage ?? article.heroImage;
   return {
     title: article.title,
     description: article.description,
     pubDate: new Date(article.pubDate),
     updatedDate: article.updatedAt ? new Date(article.updatedAt) : undefined,
-    heroImage: article.heroImage,
+    featuredImage: image,
+    heroImage: image,
     draft: article.status === "draft",
     author: article.author,
     defaultWidth: article.defaultWidth,

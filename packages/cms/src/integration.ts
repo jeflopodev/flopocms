@@ -32,9 +32,12 @@ export function cmsAdmin(siteConfig?: CmsConfig): AstroIntegration {
 
   const routes: Array<{ pattern: string; entrypoint: string }> = [
     { pattern: "/admin", entrypoint: resolveRoute("./routes/admin/index.astro") },
+    { pattern: "/admin/setup", entrypoint: resolveRoute("./routes/admin/setup.astro") },
+    { pattern: "/admin/login", entrypoint: resolveRoute("./routes/admin/login.astro") },
     { pattern: "/admin/posts", entrypoint: resolveRoute("./routes/admin/posts/index.astro") },
     { pattern: "/admin/posts/new", entrypoint: resolveRoute("./routes/admin/posts/new.astro") },
     { pattern: "/admin/posts/[id]", entrypoint: resolveRoute("./routes/admin/posts/[id].astro") },
+    { pattern: "/admin/posts/[id]/preview", entrypoint: resolveRoute("./routes/admin/posts/[id]/preview.astro") },
     { pattern: "/admin/assets", entrypoint: resolveRoute("./routes/admin/assets/index.astro") },
     { pattern: "/admin/profile", entrypoint: resolveRoute("./routes/admin/profile.astro") },
     { pattern: "/api/admin/logout", entrypoint: resolveRoute("./routes/api/admin/logout.ts") },

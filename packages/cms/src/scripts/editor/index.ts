@@ -6,7 +6,7 @@ import { EditorDomAdapter } from "./dom-adapter";
 import { LockManager } from "./lock-manager";
 import { AssetPickerModal } from "./asset-modal";
 import { actionChange, actionFor } from "./actions";
-import type { AssetSummary } from "../../lib/asset-library";
+import type { AssetSummary } from "#/lib/asset-library";
 
 /**
  * What the Editor needs handed to it to start, and nothing more.

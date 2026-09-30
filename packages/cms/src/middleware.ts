@@ -10,22 +10,49 @@ import { createServices } from "./lib/services";
  * `Astro.locals.user`.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
-  const { pathname } = context.url;
+  try {
+    const { pathname } = context.url;
 
-  // Only protect /admin and /api/admin paths
-  const isAdminPage = pathname.startsWith("/admin");
-  const isAdminApi = pathname.startsWith("/api/admin");
+    // Only protect /admin and /api/admin paths
+    const isAdminPage = pathname.startsWith("/admin");
+    const isAdminApi = pathname.startsWith("/api/admin");
 
-  if (!isAdminPage && !isAdminApi) {
-    return next();
+    if (!isAdminPage && !isAdminApi) {
+      return next();
+    }
+
+    const { accounts } = createServices(context.locals);
+  let userCount = 0;
+  try {
+    userCount = await accounts.count();
+  } catch (err) {
+    console.error("Middleware checking accounts count error:", err);
   }
 
-  // Allow login page and public assets without authentication
+  // First-run setup: if no user accounts exist yet in D1, redirect to /admin/setup
+  if (userCount === 0) {
+    if (pathname === "/admin/setup") {
+      return next();
+    }
+    if (isAdminApi) {
+      return new Response(JSON.stringify({ error: "CMS not initialized. Please complete initial setup." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return context.redirect("/admin/setup");
+  }
+
+  // Once an account exists, /admin/setup is no longer accessible
+  if (pathname === "/admin/setup") {
+    return context.redirect("/admin/login");
+  }
+
+  // Allow login page without authentication
   if (pathname === "/admin/login") {
     const token = context.cookies.get("admin_session")?.value;
     if (token) {
       try {
-        const { accounts } = createServices(context.locals);
         const user = await accounts.editorFor(token);
         if (user) {
           return context.redirect("/admin/posts");
@@ -74,4 +101,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
     return context.redirect("/admin/login");
   }
+} catch (fatalError: any) {
+  console.error("FATAL MIDDLEWARE ERROR:", fatalError);
+  return new Response(`[FATAL MIDDLEWARE ERROR] ${fatalError?.message}\n${fatalError?.stack}`, {
+    status: 500,
+    headers: { "Content-Type": "text/plain" },
+  });
+}
 });

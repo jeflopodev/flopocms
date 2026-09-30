@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { assetLibrarySummary } from "../../../lib/asset-library";
-import { createServices } from "../../../lib/services";
-import { type Asset } from "../../../lib/db";
+import AdminLayout from "#/layouts/AdminLayout.astro";
+import { assetLibrarySummary } from "#/lib/asset-library";
+import { createServices } from "#/lib/services";
+import { type Asset } from "#/lib/db";
 
 const services = createServices(Astro.locals);
 
@@ -232,9 +232,9 @@ const library = assetLibrarySummary(assets);
     type AssetSort,
     type AssetTypeFilter,
     type MediaKind,
-  } from "../../../lib/asset-library";
-  import { createUploadQueue, postAssetFile, type UploadItem } from "../../../lib/upload-queue";
-  import { convertRasterToWebp } from "../../../scripts/editor/image-to-webp";
+  } from "#/lib/asset-library";
+  import { createUploadQueue, postAssetFile, type UploadItem } from "#/lib/upload-queue";
+  import { convertRasterToWebp } from "#/scripts/editor/image-to-webp";
 
   interface AssetData {
     id: string;

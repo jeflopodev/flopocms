@@ -1,7 +1,7 @@
 export const prerender = false;
 
-import { adminRoute, readJson } from "../../../../lib/admin-route";
-import { deletePostLifecycle } from "../../../../lib/post-lifecycle";
+import { adminRoute, readJson } from "#/lib/admin-route";
+import { deletePostLifecycle } from "#/lib/post-lifecycle";
 
 export const POST = adminRoute(async ({ request, services }) => {
   const raw = await readJson(request);

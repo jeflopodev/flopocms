@@ -4,6 +4,7 @@ dist/
 .review/
 # generated types
 .astro/
+.cloudflare/
 .wrangler/
 worker-configuration.d.ts
 

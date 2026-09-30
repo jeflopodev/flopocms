@@ -1,4 +1,4 @@
-import type { Mark } from "../types";
+import type { Mark } from "#/types";
 
 /**
  * Canonical DSL tag for each inline Mark.

@@ -1,5 +1,5 @@
-import type { BlockNode, InlineSpan } from "../types";
-import { getBlock } from "../registry";
+import type { BlockNode, InlineSpan } from "#/types";
+import { getBlock } from "#/registry";
 import { linkSnippet, markSnippet } from "./marks";
 
 function formatAttrValue(val: any): string {

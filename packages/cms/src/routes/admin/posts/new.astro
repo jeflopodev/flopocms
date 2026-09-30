@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
 
-import { createServices } from "../../../lib/services";
-import { createDraftPost } from "../../../lib/post-lifecycle";
+import { createServices } from "#/lib/services";
+import { createDraftPost } from "#/lib/post-lifecycle";
 
 const user = Astro.locals.user;
 if (!user) {
@@ -13,7 +13,8 @@ const services = createServices(Astro.locals);
 const result = await createDraftPost({ actor: user, services });
 
 if (!result.success || !result.id) {
-  return Astro.redirect("/admin/posts");
+  console.error("Failed to create draft post:", result.error);
+  return Astro.redirect(`/admin/posts?error=${encodeURIComponent(result.error || "Failed to create draft post")}`);
 }
 
 return Astro.redirect(`/admin/posts/${result.id}`);

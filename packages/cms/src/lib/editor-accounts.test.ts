@@ -318,3 +318,36 @@ describe("an Editor Account", () => {
     expect(created.createdAt).toBe(START.toISOString());
   });
 });
+
+describe("initial setup and user count", () => {
+  it("reports 0 accounts when empty and provisions the first admin", async () => {
+    const clock = testClock();
+    const accounts = new InMemoryEditorAccounts(clock, []);
+
+    expect(await accounts.count()).toBe(0);
+
+    const initial = await accounts.createInitialUser("admin", "secure-password-123");
+    expect(initial).not.toBeNull();
+    expect(initial?.editor.username).toBe("admin");
+    expect(initial?.token).toBeTruthy();
+
+    expect(await accounts.count()).toBe(1);
+
+    // Verifies session is issued and active
+    const current = await accounts.editorFor(initial?.token);
+    expect(current?.username).toBe("admin");
+
+    // Second call fails because an admin already exists
+    const duplicate = await accounts.createInitialUser("hacker", "another-password-123");
+    expect(duplicate).toBeNull();
+    expect(await accounts.count()).toBe(1);
+  });
+
+  it("rejects password shorter than MIN_PASSWORD_LENGTH", async () => {
+    const clock = testClock();
+    const accounts = new InMemoryEditorAccounts(clock, []);
+
+    await expect(accounts.createInitialUser("admin", "short")).rejects.toThrow();
+  });
+});
+

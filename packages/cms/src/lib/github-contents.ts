@@ -9,12 +9,11 @@
  * local substitute so callers can be tested without a network or a PAT.
  */
 
-export const DEFAULT_REPO = "jeflopodev/blog-astro";
 export const DEFAULT_BRANCH = "main";
 
 export interface GithubContentsConfig {
   pat: string;
-  repo?: string;
+  repo: string;
   branch?: string;
 }
 
@@ -101,7 +100,10 @@ export class HttpGithubContents implements GithubContents {
   private readonly branch: string;
 
   constructor(private readonly config: GithubContentsConfig) {
-    this.repo = config.repo || DEFAULT_REPO;
+    if (!config.repo) {
+      throw new Error("GithubContentsConfig.repo is required");
+    }
+    this.repo = config.repo;
     this.branch = config.branch || DEFAULT_BRANCH;
   }
 

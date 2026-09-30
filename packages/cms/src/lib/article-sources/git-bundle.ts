@@ -1,6 +1,6 @@
 import { getCollection, type CollectionEntry } from "astro:content";
 import type { ImageMetadata } from "astro";
-import type { Article, ArticleSource, BundledHeroImage, HeroImage, TemplateId } from "../article";
+import type { Article, ArticleSource, BundledHeroImage, HeroImage, TemplateId } from "#/lib/article";
 
 /**
  * The Git bundle source: reads Post Bundles from `<site>/src/content/blog/<slug>/index.mdx`

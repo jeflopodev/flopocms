@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute } from "../../../lib/admin-route";
+import { adminRoute } from "#/lib/admin-route";
 
 /**
  * Who the `admin_session` cookie belongs to, if anyone.

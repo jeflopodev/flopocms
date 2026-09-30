@@ -4,13 +4,13 @@ import {
   assetLibraryView,
   type AssetCard,
   type AssetSummary,
-} from "../../lib/asset-library";
+} from "#/lib/asset-library";
 import {
   createUploadQueue,
   postAssetFile,
   type UploadItem,
   type UploadedAsset,
-} from "../../lib/upload-queue";
+} from "#/lib/upload-queue";
 import { convertRasterToWebp } from "./image-to-webp";
 
 export interface AssetPickerModalOptions {

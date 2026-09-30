@@ -1,4 +1,4 @@
-import type { BlockDefinition, BlockRenderContext } from "../types";
+import type { BlockDefinition, BlockRenderContext } from "#/types";
 import { relatedPostsSchema, type RelatedPostsProps } from "./schema";
 
 export * from "./schema";

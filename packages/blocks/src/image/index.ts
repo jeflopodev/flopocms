@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { BlockDefinition } from "../types";
+import type { BlockDefinition } from "#/types";
 
 export const imageBlockSchema = v.object({
   src: v.string(),

@@ -1,7 +1,7 @@
 import { eq, or } from "drizzle-orm";
-import type { DbClient } from "../db";
-import { posts as postsTable } from "../db";
-import type { Article, ArticleSource, TemplateId } from "../article";
+import type { DbClient } from "#/lib/db";
+import { posts as postsTable } from "#/lib/db";
+import type { Article, ArticleSource, TemplateId } from "#/lib/article";
 
 export function parseTags(raw: string | null | undefined): string[] {
   if (!raw) return [];

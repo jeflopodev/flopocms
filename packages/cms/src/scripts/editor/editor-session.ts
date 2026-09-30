@@ -10,7 +10,7 @@
  * That is what makes the transitions below testable without a browser.
  */
 
-import type { ArticleWriteModel, EditableArticleFields } from "../../lib/article-write-model";
+import type { ArticleWriteModel, EditableArticleFields } from "#/lib/article-write-model";
 
 export type SaveTarget = "draft" | "published";
 

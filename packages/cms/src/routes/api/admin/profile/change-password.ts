@@ -1,7 +1,7 @@
 export const prerender = false;
 
-import { adminRoute, readJson } from "../../../../lib/admin-route";
-import { MIN_PASSWORD_LENGTH } from "../../../../lib/editor-accounts";
+import { adminRoute, readJson } from "#/lib/admin-route";
+import { MIN_PASSWORD_LENGTH } from "#/lib/editor-accounts";
 
 interface ChangePasswordPayload {
   currentPassword?: string;

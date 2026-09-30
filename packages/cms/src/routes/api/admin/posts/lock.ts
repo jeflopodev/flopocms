@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute, readJson } from "../../../../lib/admin-route";
+import { adminRoute, readJson } from "#/lib/admin-route";
 
 /**
  * The lock's three verbs in one file still, but no longer three copies of the same

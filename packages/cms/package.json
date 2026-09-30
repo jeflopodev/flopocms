@@ -23,9 +23,16 @@
     "cms-check-images": "./scripts/check-image-sizes.mjs"
   },
   "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "d1:migrate": "cf d1 migrations apply 8c1e6b53-e6f9-47a8-ac0d-9631b4234a48",
+    "d1:migrate:local": "cf d1 migrations apply 8c1e6b53-e6f9-47a8-ac0d-9631b4234a48 --local",
+    "cf:deploy": "astro build && node scripts/prepare-cf-output.mjs && cf deploy --prebuilt",
+    "deploy": "astro build && node scripts/prepare-cf-output.mjs && cf deploy --prebuilt"
   },
   "publishConfig": {
     "access": "public",
@@ -46,7 +53,9 @@
     "astro": "^7.0.0"
   },
   "devDependencies": {
+    "@astrojs/cloudflare": "^14.3.1",
     "astro": "^7.3.2",
+    "cf": "^1.0.0-beta.5",
     "drizzle-kit": "1.0.0-rc.4",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"

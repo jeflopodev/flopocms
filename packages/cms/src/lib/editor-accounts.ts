@@ -103,6 +103,10 @@ export interface EditorAccounts {
   }): Promise<EndSessionResult>;
   /** Ends every session the Editor has, the one asking included. Answers how many ended. */
   endAllSessions(editorId: string): Promise<number>;
+  /** Returns the total number of registered editor accounts. */
+  count(): Promise<number>;
+  /** Creates the very first administrator account if no users exist. Returns SignInResult or null if users already exist. */
+  createInitialUser(username: string, password: string): Promise<SignInResult | null>;
 }
 
 /** A username is matched the way it is stored, so `Jeflopo` and ` jeflopo ` are one Editor. */
@@ -274,6 +278,45 @@ export function createD1EditorAccounts(db: DbClient, clock: Clock = systemClock)
       await db.delete(sessionsTable).where(eq(sessionsTable.userId, editorId));
       return open.length;
     },
+
+    async count() {
+      const rows = await db.select({ id: usersTable.id }).from(usersTable);
+      return rows.length;
+    },
+
+    async createInitialUser(username, password) {
+      if (!username || !password || password.length < MIN_PASSWORD_LENGTH) {
+        throw new Error("Invalid username or password");
+      }
+      const existing = await this.count();
+      if (existing > 0) {
+        return null;
+      }
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(password, salt);
+      const id = crypto.randomUUID();
+      const normUser = normalizeUsername(username);
+
+      await db.insert(usersTable).values({
+        id,
+        username: normUser,
+        passwordHash,
+        salt,
+      });
+
+      const token = generateSessionToken();
+      await db.insert(sessionsTable).values({
+        id: crypto.randomUUID(),
+        userId: id,
+        token,
+        expiresAt: sessionExpiry(),
+      });
+
+      return {
+        token,
+        editor: { id, username: normUser },
+      };
+    },
   };
 }
 
@@ -436,6 +479,32 @@ export class InMemoryEditorAccounts implements EditorAccounts {
     for (const [token] of mine) this.sessions.delete(token);
 
     return mine.length;
+  }
+
+  async count(): Promise<number> {
+    return this.accounts.size;
+  }
+
+  async createInitialUser(username: string, password: string): Promise<SignInResult | null> {
+    if (!username || !password || password.length < MIN_PASSWORD_LENGTH) {
+      throw new Error("Invalid username or password");
+    }
+    if (this.accounts.size > 0) {
+      return null;
+    }
+    const salt = generateSalt();
+    const account: EditorAccount = {
+      id: crypto.randomUUID(),
+      username: normalizeUsername(username),
+      passwordHash: await hashPassword(password, salt),
+      salt,
+      createdAt: this.clock.now().toISOString(),
+    };
+    this.accounts.set(account.id, account);
+    return {
+      token: await this.issue(account.id),
+      editor: { id: account.id, username: account.username },
+    };
   }
 
   /** Test helper: the sessions still stored, expired ones included. */

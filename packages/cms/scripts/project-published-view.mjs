@@ -105,7 +105,7 @@ if (process.env.PROJECT_DRY_RUN === "1") {
 }
 
 try {
-  execFileSync(pnpm, ["exec", "wrangler", "d1", "execute", D1_BINDING, "--remote", "--file", SQL_PATH], {
+  execFileSync("cf", ["d1", "raw", D1_BINDING, "--file", SQL_PATH], {
     stdio: "inherit",
     encoding: "utf-8",
   });

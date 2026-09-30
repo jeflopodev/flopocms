@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inspectDocument, parseDslToBlocks } from "./parser";
-import { getAllBlocks, getEditorBlockCards } from "../registry";
+import { getAllBlocks, getEditorBlockCards } from "#/registry";
 
 const problemsOf = (dsl: string) => inspectDocument(dsl).problems;
 

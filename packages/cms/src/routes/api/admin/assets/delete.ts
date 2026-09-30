@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { adminRoute, readJson } from "../../../../lib/admin-route";
+import { adminRoute, readJson } from "#/lib/admin-route";
 
 export const POST = adminRoute(async ({ request, services }) => {
   const raw = await readJson(request);

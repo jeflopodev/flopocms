@@ -1,4 +1,4 @@
-import type { BlockDefinition } from "../types";
+import type { BlockDefinition } from "#/types";
 import { youtubeSchema, type YouTubeProps } from "./schema";
 
 export * from "./schema";
