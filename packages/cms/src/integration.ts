@@ -43,6 +43,7 @@ export function cmsAdmin(siteConfig?: CmsConfig): AstroIntegration {
     { pattern: "/api/admin/logout", entrypoint: resolveRoute("./routes/api/admin/logout.ts") },
     { pattern: "/api/admin/session", entrypoint: resolveRoute("./routes/api/admin/session.ts") },
     { pattern: "/api/admin/assets/upload", entrypoint: resolveRoute("./routes/api/admin/assets/upload.ts") },
+    { pattern: "/api/admin/assets/file", entrypoint: resolveRoute("./routes/api/admin/assets/file.ts") },
     { pattern: "/api/admin/assets/update", entrypoint: resolveRoute("./routes/api/admin/assets/update.ts") },
     { pattern: "/api/admin/assets/delete", entrypoint: resolveRoute("./routes/api/admin/assets/delete.ts") },
     { pattern: "/api/admin/posts/save", entrypoint: resolveRoute("./routes/api/admin/posts/save.ts") },

@@ -54,6 +54,18 @@ export interface AssetCard {
 
 export const EMPTY_FILTER_MESSAGE = "No assets match the selected filter criteria.";
 
+/**
+ * Where admin chrome loads an asset's bytes from.
+ *
+ * The stored `url` stays site-relative (`/uploads/<file>`) for articles, but the
+ * admin may run on another origin where that 404s. Thumbnails, previews and
+ * downloads in admin surfaces read through the session-guarded file route
+ * instead, addressed by record id so callers never name a repository path.
+ */
+export function previewUrlForAsset(id: string): string {
+  return `/api/admin/assets/file?id=${encodeURIComponent(id)}`;
+}
+
 export function mediaKindFor(mimeType: string | null | undefined): MediaKind {
   const mime = mimeType || "";
   if (mime.startsWith("image/")) return "image";

@@ -20,6 +20,25 @@ describe("GithubContents", () => {
     expect(await contents.readFile("src/content/blog/missing/index.mdx")).toBeNull();
   });
 
+  it("round-trips raw bytes without text decoding", async () => {
+    const contents = new InMemoryGithubContents();
+    const bytes = new Uint8Array([0, 255, 137, 80, 78, 71, 13, 10, 26, 10, 128, 200]);
+
+    const written = await contents.putFile("public/uploads/hero.webp", bytes, {
+      message: "media(global): upload hero.webp [skip ci]",
+    });
+    expect(written.success).toBe(true);
+
+    const read = await contents.readBytes("public/uploads/hero.webp");
+    expect(read?.sha).toBe(written.sha);
+    expect(read?.bytes).toEqual(bytes);
+  });
+
+  it("returns null bytes for a path that was never written", async () => {
+    const contents = new InMemoryGithubContents();
+    expect(await contents.readBytes("public/uploads/missing.webp")).toBeNull();
+  });
+
   it("records the commit message the caller supplied", async () => {
     const contents = new InMemoryGithubContents();
 

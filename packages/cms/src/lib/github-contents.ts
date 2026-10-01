@@ -50,6 +50,11 @@ export interface ReadFileResult {
   sha: string;
 }
 
+export interface ReadBytesResult {
+  bytes: Uint8Array;
+  sha: string;
+}
+
 export interface CommitFile {
   path: string;
   /** Text or raw bytes to write, or null to delete the path. */
@@ -64,6 +69,9 @@ export interface AtomicCommitRequest extends CommitRequest {
 export interface GithubContents {
   /** Reads a text file, or null when the path is absent. */
   readFile(path: string): Promise<ReadFileResult | null>;
+
+  /** Reads raw bytes (binary-safe, no text decoding), or null when absent. */
+  readBytes(path: string): Promise<ReadBytesResult | null>;
 
   /** The `main` ref sha, or null when it cannot be read. Used as an atomic base. */
   refSha(): Promise<string | null>;
@@ -129,6 +137,29 @@ export class HttpGithubContents implements GithubContents {
       if (!data?.content) return null;
       const decoded = Buffer.from(String(data.content), "base64").toString("utf-8");
       return { content: decoded, sha: data.sha };
+    } catch {
+      return null;
+    }
+  }
+
+  async readBytes(path: string): Promise<ReadBytesResult | null> {
+    try {
+      const metaRes = await fetch(this.url(path, this.branch), { headers: this.headers() });
+      if (!metaRes.ok) return null;
+      const meta = (await metaRes.json()) as any;
+      const sha = typeof meta?.sha === "string" ? meta.sha : null;
+
+      // Small files ride the metadata call; large ones (>1MB) omit `content`.
+      if (typeof meta?.content === "string" && meta.content.length > 0) {
+        return { bytes: Buffer.from(String(meta.content).replace(/\s/g, ""), "base64"), sha: sha ?? "" };
+      }
+      if (!sha) return null;
+
+      const blobRes = await fetch(this.gitUrl(`blobs/${sha}`), {
+        headers: { ...this.headers(), Accept: "application/vnd.github.raw" },
+      });
+      if (!blobRes.ok) return null;
+      return { bytes: new Uint8Array(await blobRes.arrayBuffer()), sha };
     } catch {
       return null;
     }
@@ -427,6 +458,14 @@ export class InMemoryGithubContents implements GithubContents {
     const content =
       typeof entry.content === "string" ? entry.content : Buffer.from(entry.content).toString("utf-8");
     return { content, sha: entry.sha };
+  }
+
+  async readBytes(path: string): Promise<ReadBytesResult | null> {
+    const entry = this.files.get(path);
+    if (!entry) return null;
+    const bytes =
+      typeof entry.content === "string" ? new TextEncoder().encode(entry.content) : entry.content;
+    return { bytes, sha: entry.sha };
   }
 
   async refSha(): Promise<string | null> {

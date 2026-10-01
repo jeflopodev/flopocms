@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assetLibrarySummary, assetLibraryView, mediaKindFor, type AssetSummary } from "./asset-library";
+import {
+  assetLibrarySummary,
+  assetLibraryView,
+  mediaKindFor,
+  previewUrlForAsset,
+  type AssetSummary,
+} from "./asset-library";
 
 function asset(overrides: Partial<AssetSummary> = {}): AssetSummary {
   return {
@@ -131,5 +137,15 @@ describe("the header", () => {
     expect(assetLibrarySummary(CATALOG)).toEqual({ total: 4, totalLabel: "1.8 KB" });
     // `formatBytes` says "0 KB" for nothing at all, which is the label the header shows.
     expect(assetLibrarySummary([])).toEqual({ total: 0, totalLabel: "0 KB" });
+  });
+});
+
+describe("previewUrlForAsset", () => {
+  it("addresses the session-guarded file route by record id", () => {
+    expect(previewUrlForAsset("asset-1")).toBe("/api/admin/assets/file?id=asset-1");
+  });
+
+  it("encodes ids that are not URL-safe", () => {
+    expect(previewUrlForAsset("a/b?c")).toBe("/api/admin/assets/file?id=a%2Fb%3Fc");
   });
 });

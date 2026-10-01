@@ -2,6 +2,7 @@ import { insertionForAsset } from "blocks/insertion";
 import {
   EMPTY_FILTER_MESSAGE,
   assetLibraryView,
+  previewUrlForAsset,
   type AssetCard,
   type AssetSummary,
 } from "#/lib/asset-library";
@@ -187,7 +188,7 @@ export class AssetPickerModal {
 
       const thumb =
         card.kind === "image"
-          ? `<img src="${card.url}" alt="${card.altText}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'file-icon-badge\\'><span>IMG</span></div>';" />`
+          ? `<img src="${previewUrlForAsset(card.id)}" alt="${card.altText}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'file-icon-badge\\'><span>IMG</span></div>';" />`
           : `
           <div class="file-icon-badge">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

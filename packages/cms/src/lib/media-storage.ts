@@ -15,6 +15,8 @@ export interface MediaStorageResult {
 export interface MediaStorage {
   writeMedia(file: MediaFile): Promise<MediaStorageResult>;
   deleteMedia(filename: string): Promise<MediaStorageResult>;
+  /** Reads raw bytes back, or null when the file is absent. */
+  readMedia(filename: string): Promise<Uint8Array | null>;
 }
 
 export class GitHubMediaAdapter implements MediaStorage {
@@ -50,6 +52,11 @@ export class GitHubMediaAdapter implements MediaStorage {
       message: `media(global): delete ${filename}`,
     });
     return { success: res.success, error: res.error };
+  }
+
+  async readMedia(filename: string): Promise<Uint8Array | null> {
+    const res = await this.contents.readBytes(`${this.prefix}${filename}`);
+    return res?.bytes ?? null;
   }
 }
 
@@ -105,6 +112,25 @@ export class LocalFsMediaAdapter implements MediaStorage {
       return { success: false, error: err.message || "Failed to delete local media" };
     }
   }
+
+  async readMedia(filename: string): Promise<Uint8Array | null> {
+    if (typeof process === "undefined" || !process.versions?.node) {
+      return null;
+    }
+
+    try {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const uploadsDir = await this.getUploadsDir();
+      const filePath = path.join(uploadsDir, filename);
+
+      if (!fs.existsSync(filePath)) return null;
+      return new Uint8Array(fs.readFileSync(filePath));
+    } catch (err: any) {
+      console.warn("Local filesystem read error:", err);
+      return null;
+    }
+  }
 }
 
 export class CompositeMediaAdapter implements MediaStorage {
@@ -131,6 +157,14 @@ export class CompositeMediaAdapter implements MediaStorage {
     }
     return { success: true };
   }
+
+  async readMedia(filename: string): Promise<Uint8Array | null> {
+    for (const adapter of this.adapters) {
+      const bytes = await adapter.readMedia(filename);
+      if (bytes) return bytes;
+    }
+    return null;
+  }
 }
 
 export class InMemoryMediaAdapter implements MediaStorage {
@@ -144,6 +178,10 @@ export class InMemoryMediaAdapter implements MediaStorage {
   async deleteMedia(filename: string): Promise<MediaStorageResult> {
     this.files.delete(filename);
     return { success: true };
+  }
+
+  async readMedia(filename: string): Promise<Uint8Array | null> {
+    return this.files.get(filename) ?? null;
   }
 
   hasFile(filename: string): boolean {

@@ -229,6 +229,7 @@ const library = assetLibrarySummary(assets);
     EMPTY_FILTER_MESSAGE,
     assetCard,
     assetLibraryView,
+    previewUrlForAsset,
     type AssetSort,
     type AssetTypeFilter,
     type MediaKind,
@@ -293,7 +294,9 @@ const library = assetLibrarySummary(assets);
   /** The card preview. Which element a kind gets is the page's business; the kind is not. */
   function previewFor(kind: MediaKind, asset: AssetData, altText: string): string {
     if (kind === "image") {
-      return `<img src="${asset.url}" alt="${altText}" loading="lazy" class="card-thumb-img" />`;
+      // Bytes through the session-guarded file route: the stored site-relative
+      // URL 404s when the admin runs on another origin (decoupled CMS worker).
+      return `<img src="${previewUrlForAsset(asset.id)}" alt="${altText}" loading="lazy" class="card-thumb-img" />`;
     }
 
     if (kind === "video") {
@@ -380,10 +383,10 @@ const library = assetLibrarySummary(assets);
 
     if (modalPreviewTarget) {
       if (card.kind === "image") {
-        modalPreviewTarget.innerHTML = `<img src="${asset.url}" alt="${card.altText}" class="modal-hero-img" />`;
+        modalPreviewTarget.innerHTML = `<img src="${previewUrlForAsset(asset.id)}" alt="${card.altText}" class="modal-hero-img" />`;
       } else if (card.kind === "video") {
         modalPreviewTarget.innerHTML = `
-          <video src="${asset.url}" controls class="modal-hero-video"></video>
+          <video src="${previewUrlForAsset(asset.id)}" controls class="modal-hero-video"></video>
         `;
       } else {
         modalPreviewTarget.innerHTML = `
@@ -392,7 +395,7 @@ const library = assetLibrarySummary(assets);
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <a href="${asset.url}" target="_blank" download="${asset.filename}" class="btn btn-secondary">Download File</a>
+            <a href="${previewUrlForAsset(asset.id)}" target="_blank" download="${asset.filename}" class="btn btn-secondary">Download File</a>
           </div>
         `;
       }
