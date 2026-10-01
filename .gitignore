@@ -23,6 +23,8 @@ pnpm-debug.log*
 .env.production
 .dev.vars
 .dev.vars.*
+# versioned template (keys only, no values)
+!.dev.vars.example
 
 # macOS-specific files
 .DS_Store

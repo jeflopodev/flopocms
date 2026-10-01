@@ -1,0 +1,22 @@
+# Local Worker runtime bindings for the FlopoCMS dev server (`astro dev` with
+# platformProxy). This is the local mirror of the production Worker dashboard
+# (vars + secrets): same keys, same meaning.
+#
+# Setup: cp .dev.vars.example .dev.vars  # then fill in real values
+# Production: set the same keys as vars/secrets on the `flopocms` Worker
+# dashboard. GITHUB_PAT always as secret, never versioned.
+#
+# Single-source rule: a key lives HERE or in .env, never in both.
+# Everything the Worker reads at runtime (getRuntimeEnv) belongs here.
+# .env is only for Astro/Vite build-time and Node-only tooling.
+
+# GitHub user PAT with push (scope `repo`) on GITHUB_REPO. Write-only:
+# dashboard secrets cannot be read back, keep a backup outside the repo.
+GITHUB_PAT=
+
+# Content repo this deployment writes to (Post Bundles + public/uploads).
+GITHUB_REPO=
+
+# Repo-relative dirs. Defaults (env.ts) match these; uncomment to override.
+# CONTENT_DIR=src/content/blog
+# UPLOADS_DIR=public/uploads
