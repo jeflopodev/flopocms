@@ -16,9 +16,7 @@ export default defineConfig({
 			// naming a site in this engine repo. Absent means GitHub-backed
 			// writes are disabled (see Services.contents).
 			GITHUB_REPO: bindings.text(process.env.GITHUB_REPO ?? ""),
-			DB: bindings.d1({
-				name: "flopocms-d1",
-				id: "8c1e6b53-e6f9-47a8-ac0d-9631b4234a48",
+			DB: bindings.d1({ id: "8c1e6b53-e6f9-47a8-ac0d-9631b4234a48",
 			}),
 			ASSETS: bindings.assets(),
 		},
