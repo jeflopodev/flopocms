@@ -55,7 +55,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Non-secret per-deployment config. Prefers the Variables tab, falls
-          # back to Secrets if that's where it was stored. Flows into
+          # Non-secret per-deployment config. GitHub forbids the GITHUB_ prefix
+          # for secret names, so it lives here as CONTENT_REPO (or as
+          # GITHUB_REPO under the Variables tab) and is mapped to the
+          # GITHUB_REPO binding the Worker reads. Flows into
           # cloudflare.config.ts so no site name is hardcoded.
-          GITHUB_REPO: ${{ vars.GITHUB_REPO || secrets.GITHUB_REPO }}
+          GITHUB_REPO: ${{ vars.GITHUB_REPO || secrets.CONTENT_REPO }}
